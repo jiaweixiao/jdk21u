@@ -31,6 +31,9 @@
 #include "gc/parallel/psScavenge.hpp"
 
 inline bool ParallelScavengeHeap::should_alloc_in_eden(const size_t size) const {
+  if (UseParallelFullMarkCompactGC) {
+    return false;
+  }
   const size_t eden_size = young_gen()->eden_space()->capacity_in_words();
   return size < eden_size / 2;
 }

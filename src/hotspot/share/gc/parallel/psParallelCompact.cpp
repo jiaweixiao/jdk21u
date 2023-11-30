@@ -1688,7 +1688,7 @@ bool PSParallelCompact::invoke(bool maximum_heap_compaction) {
 
   IsGCActiveMark mark;
 
-  if (ScavengeBeforeFullGC) {
+  if (ScavengeBeforeFullGC && !UseParallelFullMarkCompactGC) {
     PSScavenge::invoke_no_policy();
   }
 
@@ -1862,6 +1862,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
     }
 
     heap->resize_all_tlabs();
+
+    if (UseParallelFullMarkCompactGC) {
+      old_gen->record_used_at_full_gc();
+    }
 
     // Resize the metaspace capacity after a collection
     MetaspaceGC::compute_new_size();

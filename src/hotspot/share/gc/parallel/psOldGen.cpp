@@ -110,6 +110,8 @@ void PSOldGen::initialize_work(const char* perf_data_name, int level) {
 
   // Update the start_array
   start_array()->set_covered_region(committed_mr);
+
+  _used_in_bytes_last_full_gc = 0;
 }
 
 void PSOldGen::initialize_performance_counters(const char* perf_data_name, int level) {
@@ -404,6 +406,10 @@ class VerifyObjectStartArrayClosure : public ObjectClosure {
 void PSOldGen::verify_object_start_array() {
   VerifyObjectStartArrayClosure check(&_start_array);
   object_iterate(&check);
+}
+
+void PSOldGen::record_used_at_full_gc() {
+  _used_in_bytes_last_full_gc = object_space()->used_in_bytes();
 }
 
 #ifndef PRODUCT

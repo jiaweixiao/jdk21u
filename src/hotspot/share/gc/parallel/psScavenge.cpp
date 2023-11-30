@@ -239,7 +239,7 @@ bool PSScavenge::invoke() {
   PSAdaptiveSizePolicy* policy = heap->size_policy();
   IsGCActiveMark mark;
 
-  const bool scavenge_done = PSScavenge::invoke_no_policy();
+  const bool scavenge_done = (!UseParallelFullMarkCompactGC) ? PSScavenge::invoke_no_policy() : false;
   const bool need_full_gc = !scavenge_done ||
     policy->should_full_GC(heap->old_gen()->free_in_bytes());
   bool full_gc_done = false;
