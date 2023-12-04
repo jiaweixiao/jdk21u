@@ -33,6 +33,8 @@
 inline bool ParallelScavengeHeap::should_alloc_in_eden(const size_t size) const {
   if (UseParallelFullMarkCompactGC) {
     return false;
+  } else if (UseParallelFullScavengeGC) {
+    return true;
   }
   const size_t eden_size = young_gen()->eden_space()->capacity_in_words();
   return size < eden_size / 2;

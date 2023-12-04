@@ -1619,9 +1619,12 @@ void PSParallelCompact::summary_phase(bool maximum_compaction)
                                       space->bottom());
     const size_t available = pointer_delta(dst_space_end, *new_top_addr);
 
-    NOT_PRODUCT(summary_phase_msg(dst_space_id, *new_top_addr, dst_space_end,
-                                  SpaceId(id), space->bottom(), space->top());)
-    if (live > 0 && live <= available) {
+    NOT_PRODUCT(if (!UseParallelFullScavengeGC) {
+                  summary_phase_msg(dst_space_id, *new_top_addr, dst_space_end,
+                                    SpaceId(id), space->bottom(), space->top());
+                }
+    )
+    if (!UseParallelFullScavengeGC && live > 0 && live <= available) {
       // All the live data will fit.
       bool done = _summary_data.summarize(_space_info[id].split_info(),
                                           space->bottom(), space->top(),
@@ -1632,7 +1635,7 @@ void PSParallelCompact::summary_phase(bool maximum_compaction)
 
       // Reset the new_top value for the space.
       _space_info[id].set_new_top(space->bottom());
-    } else if (live > 0) {
+    } else if (!UseParallelFullScavengeGC && live > 0) {
       // Attempt to fit part of the source space into the target space.
       HeapWord* next_src_addr = nullptr;
       bool done = _summary_data.summarize(_space_info[id].split_info(),
@@ -1653,6 +1656,23 @@ void PSParallelCompact::summary_phase(bool maximum_compaction)
                                     SpaceId(id), next_src_addr, space->top());)
       done = _summary_data.summarize(_space_info[id].split_info(),
                                      next_src_addr, space->top(),
+                                     nullptr,
+                                     space->bottom(), dst_space_end,
+                                     new_top_addr);
+      assert(done, "space must fit when compacted into itself");
+      assert(*new_top_addr <= space->top(), "usage should not grow");
+    } else if (UseParallelFullScavengeGC && live > 0) {
+      // For parallel full scavenge gc
+      // All the live data in eden, from and to space is compacted within the space
+      // itself.
+      dst_space_id = SpaceId(id);
+      dst_space_end = space->end();
+      new_top_addr = _space_info[id].new_top_addr();
+      NOT_PRODUCT(summary_phase_msg(dst_space_id,
+                                    space->bottom(), dst_space_end,
+                                    SpaceId(id), space->bottom(), space->top());)
+      bool done = _summary_data.summarize(_space_info[id].split_info(),
+                                     space->bottom(), space->top(),
                                      nullptr,
                                      space->bottom(), dst_space_end,
                                      new_top_addr);
@@ -1688,7 +1708,7 @@ bool PSParallelCompact::invoke(bool maximum_heap_compaction) {
 
   IsGCActiveMark mark;
 
-  if (ScavengeBeforeFullGC && !UseParallelFullMarkCompactGC) {
+  if (ScavengeBeforeFullGC && !(UseParallelFullScavengeGC || UseParallelFullMarkCompactGC)) {
     PSScavenge::invoke_no_policy();
   }
 

@@ -11,7 +11,14 @@ See <https://openjdk.org/> for more information about the OpenJDK
 Community and the JDK and see <https://bugs.openjdk.org> for JDK issue
 tracking.
 
-## Using Parallel Mark Compact Collector
+
+## New GCs
+### Full heap parallel mark compact collector
 ```bash
--XX:+UseParallelGC -XX:+UseParallelFullMarkCompactGC -XX:NewSize=1k -XX:MaxNewSize=1k -XX:-UseAdaptiveSizePolicy
+-Xms32g -Xmx32g -XX:+UseParallelGC -XX:+UseParallelFullMarkCompactGC -XX:NewSize=1k -XX:MaxNewSize=1k -XX:-UseAdaptiveSizePolicy
+```
+
+### Full heap parallel scavenge collector
+```bash
+-Xms32g -Xmx32g -XX:+UseParallelGC -XX:+UseParallelFullScavengeGC -XX:NewSize=32g -XX:MaxNewSize=32g -XX:SurvivorRatio=1 -XX:-UseAdaptiveSizePolicy
 ```

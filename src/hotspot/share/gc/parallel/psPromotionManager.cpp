@@ -355,5 +355,10 @@ oop PSPromotionManager::oop_promotion_failed(oop obj, markWord obj_mark) {
     obj = obj->forwardee();
   }
 
+  if (UseParallelFullScavengeGC) {
+    log_info(gc, promotion)("UseParallelFullScavengeGC promotion failed, oom");
+    report_java_out_of_memory("GC overhead limit exceeded (psnew promotion failed)");
+  }
+
   return obj;
 }

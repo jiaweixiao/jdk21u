@@ -840,6 +840,9 @@ jint Universe::initialize_heap() {
   _collectedHeap = GCConfig::arguments()->create_heap();
 
   log_info(gc)("Using %s", _collectedHeap->name());
+  if (UseParallelFullScavengeGC) {
+    log_info(gc)("Using full heap scavenge gc");
+  }
   if (UseParallelFullMarkCompactGC) {
     log_info(gc)("Using full heap mark compact gc");
   }

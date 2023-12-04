@@ -303,8 +303,8 @@ HeapWord* ParallelScavengeHeap::mem_allocate(
       }
 
       // If certain conditions hold, try allocating from the old gen.
-      result = !UseParallelFullMarkCompactGC ? mem_allocate_old_gen(size)
-                                             : NULL;
+      result = !(UseParallelFullMarkCompactGC || UseParallelFullScavengeGC) ? mem_allocate_old_gen(size)
+                                                                            : NULL;
       if (result != nullptr) {
         return result;
       }
@@ -482,6 +482,27 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
     if (result == NULL) {
       result = old_gen()->allocate(size);
     }
+  } else if (UseParallelFullScavengeGC) {
+    // Policy of full heap scavenge gc:
+    // We assume that allocation in eden will fail unless we collect.
+    // First level allocation failure, scavenge and allocate in young gen.
+    PSScavenge::invoke();
+    result = young_gen()->allocate(size);
+
+    // Second level allocation failure.
+    //   Scavenge and allocate in young generation.
+    if (result == nullptr) {
+      PSScavenge::invoke();
+      result = young_gen()->allocate(size);
+    }
+
+    // Third level allocation failure.
+    //   After scavenge and young generation allocation failure,
+    //   allocate in young generation.
+    if (result == NULL) {
+      result = young_gen()->allocate(size);
+    }
+
   } else {
     // Policy of PS gc:
     // We assume that allocation in eden will fail unless we collect.
@@ -517,6 +538,7 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
     if (result == nullptr) {
       result = allocate_old_gen_and_record(size);
     }
+
   }
 
   return result;
