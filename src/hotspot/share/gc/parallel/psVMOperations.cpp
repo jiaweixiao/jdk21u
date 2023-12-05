@@ -50,8 +50,14 @@ void VM_ParallelGCFailedAllocation::doit() {
 }
 
 static bool is_cause_full(GCCause::Cause cause) {
-  return UseParallelFullMarkCompactGC || ((cause != GCCause::_gc_locker) && (cause != GCCause::_wb_young_gc)
-         DEBUG_ONLY(&& (cause != GCCause::_scavenge_alot)));
+  if (UseParallelFullScavengeGC) {
+    return false;
+  } else if (UseParallelFullMarkCompactGC) {
+    return true;
+  } else {
+  return (cause != GCCause::_gc_locker) && (cause != GCCause::_wb_young_gc)
+         DEBUG_ONLY(&& (cause != GCCause::_scavenge_alot));
+  }
 }
 
 // Only used for System.gc() calls
