@@ -361,6 +361,9 @@ bool PSScavenge::invoke_no_policy() {
 
   _gc_timer.register_gc_start();
 
+  // [gc breakdown]
+  unsigned long _start_majflt = os::accumMajflt();
+
   if (GCLocker::check_active_before_gc()) {
     return false;
   }
@@ -669,6 +672,9 @@ bool PSScavenge::invoke_no_policy() {
   _gc_timer.register_gc_end();
 
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
+
+  // [gc breakdown]
+  log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
 
   return !promotion_failure_occurred;
 }
