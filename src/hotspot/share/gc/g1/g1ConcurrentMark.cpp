@@ -999,10 +999,14 @@ void G1ConcurrentMark::root_region_scan_abort_and_wait() {
   root_regions()->wait_until_scan_finished();
 }
 
+static unsigned long _start_majflt = 0;
+
 void G1ConcurrentMark::concurrent_cycle_start() {
   _gc_timer_cm->register_gc_start();
 
   _gc_tracer_cm->report_gc_start(GCCause::_no_gc /* first parameter is not used */, _gc_timer_cm->gc_start());
+  // [gc breakdown]
+  _start_majflt = os::accumMajflt();
 
   _g1h->trace_heap_before_gc(_gc_tracer_cm);
 }
@@ -1028,6 +1032,8 @@ void G1ConcurrentMark::concurrent_cycle_end(bool mark_cycle_completed) {
   _gc_timer_cm->register_gc_end();
 
   _gc_tracer_cm->report_gc_end(_gc_timer_cm->gc_end(), _gc_timer_cm->time_partitions());
+  // [gc breakdown]
+  log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
 }
 
 void G1ConcurrentMark::mark_from_roots() {
