@@ -2523,11 +2523,15 @@ G1HeapPrinterMark::~G1HeapPrinterMark() {
   _g1h->numa()->print_statistics();
 }
 
+static unsigned long _start_majflt = 0;
+
 G1JFRTracerMark::G1JFRTracerMark(STWGCTimer* timer, GCTracer* tracer) :
   _timer(timer), _tracer(tracer) {
 
   _timer->register_gc_start();
   _tracer->report_gc_start(G1CollectedHeap::heap()->gc_cause(), _timer->gc_start());
+  // [gc breakdown]
+  _start_majflt = os::accumMajflt();
   G1CollectedHeap::heap()->trace_heap_before_gc(_tracer);
 }
 
@@ -2535,6 +2539,8 @@ G1JFRTracerMark::~G1JFRTracerMark() {
   G1CollectedHeap::heap()->trace_heap_after_gc(_tracer);
   _timer->register_gc_end();
   _tracer->report_gc_end(_timer->gc_end(), _timer->time_partitions());
+  // [gc breakdown]
+  log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
 }
 
 void G1CollectedHeap::prepare_for_mutator_after_young_collection() {
