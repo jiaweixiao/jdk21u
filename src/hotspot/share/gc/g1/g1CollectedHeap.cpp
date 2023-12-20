@@ -940,9 +940,10 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
   // Currently, there is no facility in the do_full_collection(bool) API to notify
   // the caller that the collection did not succeed (e.g., because it was locked
   // out by the GC locker). So, right now, we'll ignore the return value.
-
+  unsigned long _start_majflt = os::accumMajflt();
   do_full_collection(clear_all_soft_refs,
                      false /* do_maximal_compaction */);
+  log_info(gc)("Majflt(full)=%ld", os::accumMajflt() - _start_majflt);
 }
 
 bool G1CollectedHeap::upgrade_to_full_collection() {
@@ -2531,8 +2532,8 @@ G1JFRTracerMark::G1JFRTracerMark(STWGCTimer* timer, GCTracer* tracer) :
   _timer->register_gc_start();
   _tracer->report_gc_start(G1CollectedHeap::heap()->gc_cause(), _timer->gc_start());
   // [gc breakdown]
-  _start_majflt = os::accumMajflt();
-  G1CollectedHeap::heap()->trace_heap_before_gc(_tracer);
+  // _start_majflt = os::accumMajflt();
+  // G1CollectedHeap::heap()->trace_heap_before_gc(_tracer);
 }
 
 G1JFRTracerMark::~G1JFRTracerMark() {
@@ -2540,7 +2541,7 @@ G1JFRTracerMark::~G1JFRTracerMark() {
   _timer->register_gc_end();
   _tracer->report_gc_end(_timer->gc_end(), _timer->time_partitions());
   // [gc breakdown]
-  log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
+  // log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
 }
 
 void G1CollectedHeap::prepare_for_mutator_after_young_collection() {
