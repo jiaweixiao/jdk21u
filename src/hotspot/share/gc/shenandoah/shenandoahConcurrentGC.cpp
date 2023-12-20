@@ -106,7 +106,11 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
   entry_reset();
 
   // Start initial mark under STW
+  // [gc breakdown]
+  unsigned long _start_majflt = os::accumMajflt();
   vmop_entry_init_mark();
+  // [gc breakdown]
+  log_info(gc)("Majflt(Init Mark)=%ld", os::accumMajflt() - _start_majflt);
 
   {
     ShenandoahBreakpointMarkScope breakpoint_mark_scope(cause);
@@ -120,7 +124,11 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
   }
 
   // Complete marking under STW, and start evacuation
+  // [gc breakdown]
+  _start_majflt = os::accumMajflt();
   vmop_entry_final_mark();
+  // [gc breakdown]
+  log_info(gc)("Majflt(Final Mark)=%ld", os::accumMajflt() - _start_majflt);
 
   // Concurrent stack processing
   if (heap->is_evacuation_in_progress()) {
@@ -164,7 +172,11 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
     if (check_cancellation_and_abort(ShenandoahDegenPoint::_degenerated_evac)) return false;
 
     // Perform update-refs phase.
+    // [gc breakdown]
+    _start_majflt = os::accumMajflt();
     vmop_entry_init_updaterefs();
+    // [gc breakdown]
+    log_info(gc)("Majflt(Init Update Refs)=%ld", os::accumMajflt() - _start_majflt);
     entry_updaterefs();
     if (check_cancellation_and_abort(ShenandoahDegenPoint::_degenerated_updaterefs)) return false;
 
@@ -172,12 +184,20 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
     entry_update_thread_roots();
     if (check_cancellation_and_abort(ShenandoahDegenPoint::_degenerated_updaterefs)) return false;
 
+    // [gc breakdown]
+    _start_majflt = os::accumMajflt();
     vmop_entry_final_updaterefs();
+    // [gc breakdown]
+    log_info(gc)("Majflt(Final Update Refs)=%ld", os::accumMajflt() - _start_majflt);
 
     // Update references freed up collection set, kick the cleanup to reclaim the space.
     entry_cleanup_complete();
   } else {
+    // [gc breakdown]
+    _start_majflt = os::accumMajflt();
     vmop_entry_final_roots();
+    // [gc breakdown]
+    log_info(gc)("Majflt(Final Roots)=%ld", os::accumMajflt() - _start_majflt);
   }
 
   return true;

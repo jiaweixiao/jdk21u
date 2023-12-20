@@ -343,6 +343,6 @@ void G1ConcurrentMarkThread::concurrent_cycle_end(bool mark_cycle_completed) {
                                                                   mark_cycle_completed /* heap_examined */);
 
   _cm->concurrent_cycle_end(mark_cycle_completed);
-  log_info(gc)("Majflt(concurrent_cycle)=%ld", cm_majflt);
+  // log_info(gc)("Majflt(concurrent_cycle)=%ld", cm_majflt);
   ConcurrentGCBreakpoints::notify_active_to_idle();
 }
