@@ -673,8 +673,8 @@ bool PSScavenge::invoke_no_policy() {
 
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
 
-  // [gc breakdown]
-  log_info(gc)("Majflt=%ld", os::accumMajflt() - _start_majflt);
+  unsigned long _end_majflt = os::accumMajflt();
+  log_info(gc)("Majflt(young)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
 
   return !promotion_failure_occurred;
 }

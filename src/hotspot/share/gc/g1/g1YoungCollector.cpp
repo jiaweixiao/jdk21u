@@ -1038,8 +1038,6 @@ void G1YoungCollector::collect() {
     // policy for the collection deliberately elides verification (and some
     // other trivial setup above).
     policy()->record_young_collection_start();
-    // [gc breakdown]
-    unsigned long _start_majflt = os::accumMajflt();
 
     pre_evacuate_collection_set(jtm.evacuation_info());
 
@@ -1066,7 +1064,6 @@ void G1YoungCollector::collect() {
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
 
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
-    log_info(gc)("Majflt(young)=%ld", os::accumMajflt() - _start_majflt);
   }
   TASKQUEUE_STATS_ONLY(_g1h->task_queues()->print_and_reset_taskqueue_stats("Oop Queue");)
 }

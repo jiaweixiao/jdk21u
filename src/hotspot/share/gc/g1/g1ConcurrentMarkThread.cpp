@@ -172,7 +172,6 @@ bool G1ConcurrentMarkThread::phase_scan_root_regions() {
   return _cm->has_aborted();
 }
 
-static unsigned long cm_majflt = 0;
 bool G1ConcurrentMarkThread::phase_mark_loop() {
   Ticks mark_start = Ticks::now();
   log_info(gc, marking)("Concurrent Mark");
@@ -190,11 +189,11 @@ bool G1ConcurrentMarkThread::phase_mark_loop() {
     if (subphase_delay_to_keep_mmu_before_remark()) return true;
 
     // Subphase 4: Remark pause
+    // [gc breakdown]
     unsigned long _start_majflt = os::accumMajflt();
     if (subphase_remark()) return true;
-    unsigned long remark_majflt = os::accumMajflt() - _start_majflt;
-    cm_majflt += remark_majflt;
-    log_info(gc)("Majflt(remark)=%ld", remark_majflt);
+    unsigned long _end_majflt = os::accumMajflt();
+    log_info(gc)("Majflt(remark)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
 
     // Check if we need to restart the marking loop.
     if (!mark_loop_needs_restart()) break;
@@ -302,11 +301,11 @@ void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
   if (phase_delay_to_keep_mmu_before_cleanup()) return;
 
   // Phase 5: Cleanup pause
+  // [gc breakdown]
   unsigned long _start_majflt = os::accumMajflt();
   if (phase_cleanup()) return;
-  unsigned long cleanup_majflt = os::accumMajflt() - _start_majflt;
-  cm_majflt += cleanup_majflt;
-  log_info(gc)("Majflt(cleanup)=%ld", cleanup_majflt);
+  unsigned long _end_majflt = os::accumMajflt();
+  log_info(gc)("Majflt(cleanup)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
 
   // Phase 6: Clear CLD claimed marks.
   if (phase_clear_cld_claimed_marks()) return;
@@ -343,6 +342,5 @@ void G1ConcurrentMarkThread::concurrent_cycle_end(bool mark_cycle_completed) {
                                                                   mark_cycle_completed /* heap_examined */);
 
   _cm->concurrent_cycle_end(mark_cycle_completed);
-  // log_info(gc)("Majflt(concurrent_cycle)=%ld", cm_majflt);
   ConcurrentGCBreakpoints::notify_active_to_idle();
 }
