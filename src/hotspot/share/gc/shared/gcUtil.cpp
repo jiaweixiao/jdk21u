@@ -138,6 +138,7 @@ void LinearLeastSquareFit::update(double x, double y) {
       // kept as decaying averages.
       // _intercept = _mean_y.average() - _slope * _mean_x.average();
       _intercept = (_sum_y - _slope * _sum_x) / ((double) _mean_x.count());
+      log_info(gc)("LinearLeastSquareFit update: slope %lf, intercept %lf", _slope, _intercept);
     }
   }
 }

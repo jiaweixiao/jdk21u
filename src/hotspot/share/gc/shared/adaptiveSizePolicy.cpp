@@ -100,6 +100,7 @@ void AdaptiveSizePolicy::minor_collection_begin() {
 void AdaptiveSizePolicy::update_minor_pause_young_estimator(
     double minor_pause_in_ms) {
   double eden_size_in_mbytes = ((double)_eden_size)/((double)M);
+  log_info(gc)("minor_pause_young_estimator update: eden %lf mb, pause %lf ms", eden_size_in_mbytes, minor_pause_in_ms);
   _minor_pause_young_estimator->update(eden_size_in_mbytes,
     minor_pause_in_ms);
 }
@@ -146,6 +147,7 @@ void AdaptiveSizePolicy::minor_collection_end(GCCause::Cause gc_cause) {
 
     // Calculate variable used to estimate collection cost vs. gen sizes
     assert(collection_cost >= 0.0, "Expected to be non-negative");
+    log_info(gc)("minor_collection_estimator update: eden %lf mb, collection cost %lf", eden_size_in_mbytes, collection_cost);
     _minor_collection_estimator->update(eden_size_in_mbytes, collection_cost);
   }
 

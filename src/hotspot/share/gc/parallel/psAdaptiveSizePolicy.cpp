@@ -111,6 +111,7 @@ void PSAdaptiveSizePolicy::major_collection_begin() {
 void PSAdaptiveSizePolicy::update_minor_pause_old_estimator(
     double minor_pause_in_ms) {
   double promo_size_in_mbytes = ((double)_promo_size)/((double)M);
+  log_info(gc)("minor_pause_old_estimator update: promo %lf mb, pause %lf ms", promo_size_in_mbytes, minor_pause_in_ms);
   _minor_pause_old_estimator->update(promo_size_in_mbytes,
     minor_pause_in_ms);
 }
@@ -144,8 +145,10 @@ void PSAdaptiveSizePolicy::major_collection_end(size_t amount_live,
     // Calculate variables used to estimate pause time vs. gen sizes
     double eden_size_in_mbytes = ((double)_eden_size)/((double)M);
     double promo_size_in_mbytes = ((double)_promo_size)/((double)M);
+    log_info(gc)("major_pause_old_estimator update: promo %lf mb, collection cost %lf", promo_size_in_mbytes, major_pause_in_ms);
     _major_pause_old_estimator->update(promo_size_in_mbytes,
       major_pause_in_ms);
+    log_info(gc)("major_pause_young_estimator update: eden %lf mb, collection cost %lf", eden_size_in_mbytes, major_pause_in_ms);
     _major_pause_young_estimator->update(eden_size_in_mbytes,
       major_pause_in_ms);
 
@@ -156,6 +159,7 @@ void PSAdaptiveSizePolicy::major_collection_end(size_t amount_live,
 
     // Calculate variable used to estimate collection cost vs. gen sizes
     assert(collection_cost >= 0.0, "Expected to be non-negative");
+    log_info(gc)("major_collection_estimator update: promo %lf mb, collection cost %lf", promo_size_in_mbytes, collection_cost);
     _major_collection_estimator->update(promo_size_in_mbytes,
         collection_cost);
   }
