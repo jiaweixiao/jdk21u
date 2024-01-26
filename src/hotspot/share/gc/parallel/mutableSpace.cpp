@@ -141,6 +141,8 @@ void MutableSpace::initialize(MemRegion mr,
   if (clear_space) {
     clear(mangle_space);
   }
+
+  _used_in_bytes_last_gc = 0;
 }
 
 void MutableSpace::clear(bool mangle_space) {
@@ -264,3 +266,5 @@ void MutableSpace::verify() {
   }
   guarantee(p == top(), "end of last object must match end of space");
 }
+
+void MutableSpace::record_used_at_gc() { _used_in_bytes_last_gc = used_in_bytes(); }

@@ -1890,6 +1890,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
       old_gen->record_used_at_full_gc();
     }
 
+    if (UseParallelFullScavengeGC) {
+      young_gen->from_space()->record_used_at_gc();
+    }
+
     // Resize the metaspace capacity after a collection
     MetaspaceGC::compute_new_size();
 

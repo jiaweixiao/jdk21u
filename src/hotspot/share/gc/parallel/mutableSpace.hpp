@@ -59,6 +59,9 @@ class MutableSpace: public CHeapObj<mtGC> {
   HeapWord* _bottom;
   HeapWord* volatile _top;
   HeapWord* _end;
+  // Record space usage at the end of gc.
+  // Used to get the size of space that used by new allocated objects since last gc.
+  size_t _used_in_bytes_last_gc;
 
   MutableSpaceMangler* mangler() { return _mangler; }
 
@@ -136,6 +139,9 @@ class MutableSpace: public CHeapObj<mtGC> {
   virtual size_t tlab_capacity(Thread* thr) const         { return capacity_in_bytes();            }
   virtual size_t tlab_used(Thread* thr) const             { return used_in_bytes();                }
   virtual size_t unsafe_max_tlab_alloc(Thread* thr) const { return free_in_bytes();                }
+
+  size_t used_in_bytes_since_last_gc() const    { return used_in_bytes() - _used_in_bytes_last_gc; }
+  void record_used_at_gc();
 
   // Allocation (return null if full)
   virtual HeapWord* cas_allocate(size_t word_size);
