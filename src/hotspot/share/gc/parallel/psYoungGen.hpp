@@ -31,6 +31,8 @@
 #include "gc/parallel/psVirtualspace.hpp"
 #include "gc/parallel/spaceCounters.hpp"
 
+#include "gc/shared/gc_globals.hpp"
+
 class PSYoungGen : public CHeapObj<mtGC> {
   friend class VMStructs;
   friend class ParallelScavengeHeap;
@@ -129,7 +131,8 @@ class PSYoungGen : public CHeapObj<mtGC> {
 
   // Allocation
   HeapWord* allocate(size_t word_size) {
-    HeapWord* result = eden_space()->cas_allocate(word_size);
+    HeapWord* result = !UseParallelFullScavengeGC ? eden_space()->cas_allocate(word_size)
+                                                  : from_space()->cas_allocate(word_size);
     return result;
   }
 

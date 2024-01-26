@@ -546,22 +546,55 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
 
 void ParallelScavengeHeap::ensure_parsability(bool retire_tlabs) {
   CollectedHeap::ensure_parsability(retire_tlabs);
-  if (!UseParallelFullMarkCompactGC) { young_gen()->eden_space()->ensure_parsability(); }
+  if (!UseParallelFullMarkCompactGC) {
+    if (!UseParallelFullScavengeGC) {
+      young_gen()->eden_space()->ensure_parsability();
+    } else {
+      young_gen()->from_space()->ensure_parsability();
+    }
+  }
 }
 
 size_t ParallelScavengeHeap::tlab_capacity(Thread* thr) const {
-  return !UseParallelFullMarkCompactGC ? young_gen()->eden_space()->tlab_capacity(thr)
-                                       : old_gen()->free_in_bytes();
+  size_t ret = 0;
+  if (!UseParallelFullMarkCompactGC) {
+    if (!UseParallelFullScavengeGC) {
+      ret = young_gen()->eden_space()->tlab_capacity(thr);
+    } else {
+      ret = young_gen()->from_space()->free_in_bytes();
+    }
+  } else {
+    ret = old_gen()->free_in_bytes();
+  }
+  return ret;
 }
 
 size_t ParallelScavengeHeap::tlab_used(Thread* thr) const {
-  return !UseParallelFullMarkCompactGC ? young_gen()->eden_space()->tlab_used(thr)
-                                       : old_gen()->used_in_bytes_since_last_full_gc();
+  size_t ret = 0;
+  if (!UseParallelFullMarkCompactGC) {
+    if (!UseParallelFullScavengeGC) {
+      ret = young_gen()->eden_space()->tlab_used(thr);
+    } else {
+      ret = young_gen()->from_space()->used_in_bytes_since_last_gc();
+    }
+  } else {
+    ret = old_gen()->used_in_bytes_since_last_full_gc();
+  }
+  return ret;
 }
 
 size_t ParallelScavengeHeap::unsafe_max_tlab_alloc(Thread* thr) const {
-  return !UseParallelFullMarkCompactGC ? young_gen()->eden_space()->unsafe_max_tlab_alloc(thr)
-                                       : old_gen()->free_in_bytes();
+  size_t ret = 0;
+  if (!UseParallelFullMarkCompactGC) {
+    if (!UseParallelFullScavengeGC) {
+      ret = young_gen()->eden_space()->unsafe_max_tlab_alloc(thr);
+    } else {
+      ret = young_gen()->from_space()->unsafe_max_tlab_alloc(thr);
+    }
+  } else {
+    ret = old_gen()->free_in_bytes();
+  }
+  return ret;
 }
 
 HeapWord* ParallelScavengeHeap::allocate_new_tlab(size_t min_size, size_t requested_size, size_t* actual_size) {

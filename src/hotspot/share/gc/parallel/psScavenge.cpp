@@ -389,7 +389,7 @@ bool PSScavenge::invoke_no_policy() {
 
   if (AdaptiveSizePolicy::should_update_eden_stats(gc_cause)) {
     // Gather the feedback data for eden occupancy.
-    young_gen->eden_space()->accumulate_statistics();
+    young_gen->from_space()->accumulate_statistics();
   }
 
   heap->print_heap_before_gc();

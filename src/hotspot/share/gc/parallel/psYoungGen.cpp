@@ -149,7 +149,7 @@ void PSYoungGen::compute_initial_space_boundaries() {
   size_t size = virtual_space()->committed_size();
   assert(size >= 3 * SpaceAlignment, "Young space is not large enough for eden + 2 survivors");
 
-  size_t survivor_size = size / InitialSurvivorRatio;
+  size_t survivor_size = size / 2 - 4;
   survivor_size = align_down(survivor_size, SpaceAlignment);
   // ... but never less than an alignment
   survivor_size = MAX2(survivor_size, SpaceAlignment);
@@ -674,37 +674,43 @@ void PSYoungGen::swap_spaces() {
 }
 
 size_t PSYoungGen::capacity_in_bytes() const {
-  return eden_space()->capacity_in_bytes()
-       + from_space()->capacity_in_bytes();  // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->capacity_in_bytes() + from_space()->capacity_in_bytes()
+                                    : from_space()->capacity_in_bytes();
 }
 
 
 size_t PSYoungGen::used_in_bytes() const {
-  return eden_space()->used_in_bytes()
-       + from_space()->used_in_bytes();      // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->used_in_bytes() + from_space()->used_in_bytes()
+                                    : from_space()->used_in_bytes();
 }
 
 
 size_t PSYoungGen::free_in_bytes() const {
-  return eden_space()->free_in_bytes()
-       + from_space()->free_in_bytes();      // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->free_in_bytes() + from_space()->free_in_bytes()
+                                    : from_space()->free_in_bytes();
 }
 
 size_t PSYoungGen::capacity_in_words() const {
-  return eden_space()->capacity_in_words()
-       + from_space()->capacity_in_words();  // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->capacity_in_words() + from_space()->capacity_in_words()
+                                    : from_space()->capacity_in_words();
 }
 
 
 size_t PSYoungGen::used_in_words() const {
-  return eden_space()->used_in_words()
-       + from_space()->used_in_words();      // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->used_in_words() + from_space()->used_in_words()
+                                    : from_space()->used_in_words();
 }
 
 
 size_t PSYoungGen::free_in_words() const {
-  return eden_space()->free_in_words()
-       + from_space()->free_in_words();      // to_space() is only used during scavenge
+  // to_space() is only used during scavenge
+  return !UseParallelFullScavengeGC ? eden_space()->used_in_words() + from_space()->used_in_words()
+                                    : from_space()->free_in_words();
 }
 
 void PSYoungGen::object_iterate(ObjectClosure* blk) {
