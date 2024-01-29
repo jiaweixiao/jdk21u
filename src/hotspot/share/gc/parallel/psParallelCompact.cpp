@@ -1505,7 +1505,11 @@ PSParallelCompact::summarize_space(SpaceId id, bool maximum_compaction)
 
   const MutableSpace* space = _space_info[id].space();
   if (_space_info[id].new_top() != space->bottom()) {
-    HeapWord* dense_prefix_end = compute_dense_prefix(id, maximum_compaction);
+    HeapWord* dense_prefix_end = !UseParallelFullMarkCompactGCMoveDense ?
+                                    compute_dense_prefix(id, maximum_compaction)
+                                  : space->bottom();
+    log_info(gc)("Dense prefix end: " PTR_FORMAT ", space bottom: " PTR_FORMAT,
+                 p2i(dense_prefix_end), p2i(space->bottom()));
     _space_info[id].set_dense_prefix(dense_prefix_end);
 
 #ifndef PRODUCT

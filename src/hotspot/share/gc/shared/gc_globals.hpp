@@ -127,6 +127,9 @@
           "Use the Parallel full heap mark compact garbage collector. "     \
           "It disable young gen of PS gc.")                                 \
                                                                             \
+  product(bool, UseParallelFullMarkCompactGCMoveDense, false,               \
+          "Do not compute dense prefix in summary phase.")                  \
+                                                                            \
   product(bool, UseEpsilonGC, false, EXPERIMENTAL,                          \
           "Use the Epsilon (no-op) garbage collector")                      \
                                                                             \
