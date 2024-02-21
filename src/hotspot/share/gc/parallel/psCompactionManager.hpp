@@ -93,6 +93,12 @@ class ParCompactionManager : public CHeapObj<mtGC> {
 
   StringDedup::Requests _string_dedup_requests;
 
+  jlong   _copy_cycle;
+  size_t  _copy_size;
+  size_t  _copy_count;
+  size_t  _skipcopy_size;
+  size_t  _skipcopy_count;
+
   static PSOldGen* old_gen()             { return _old_gen; }
   static ObjectStartArray* start_array() { return _start_array; }
   static OopTaskQueueSet* oop_task_queues()  { return _oop_task_queues; }
@@ -203,6 +209,18 @@ class ParCompactionManager : public CHeapObj<mtGC> {
 
   // Region staks hold regions in from-space; called after compaction.
   static void verify_all_region_stack_empty() NOT_DEBUG_RETURN;
+
+  inline void reset_copy_cycle()                { _copy_cycle = 0; }
+  inline void inc_copy_cycle(jlong c)           { _copy_cycle += c;}
+  inline double get_copy_cycle_in_ms()          { return (double)(_copy_cycle / 2400000); }
+  inline void reset_copy_size()                 { _copy_size = 0; _copy_count = 0; }
+  inline void inc_copy_size(size_t s)           { _copy_size += s; _copy_count += 1; }
+  inline double get_copy_size_in_mb()           { return _copy_size * HeapWordSize / (1024 * 1024); }
+  inline size_t get_copy_count()                { return _copy_count; }
+  inline void reset_skipcopy_size()             { _skipcopy_size = 0; _skipcopy_count = 0; }
+  inline void inc_skipcopy_size(size_t s)       { _skipcopy_size += s; _skipcopy_count += 1; }
+  inline double get_skipcopy_size_in_mb()       { return _skipcopy_size * HeapWordSize / (1024 * 1024); }
+  inline size_t get_skipcopy_count()            { return _skipcopy_count; }
 };
 
 bool ParCompactionManager::marking_stacks_empty() const {

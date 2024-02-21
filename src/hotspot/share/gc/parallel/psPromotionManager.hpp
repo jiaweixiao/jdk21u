@@ -93,6 +93,11 @@ class PSPromotionManager {
 
   StringDedup::Requests _string_dedup_requests;
 
+  Tickspan                            _copy_time;
+  jlong                               _copy_cycle;
+  size_t                              _copy_size;
+  size_t                              _copy_count;
+
   // Accessors
   static PSOldGen* old_gen()         { return _old_gen; }
   static MutableSpace* young_space() { return _young_space; }
@@ -141,6 +146,17 @@ class PSPromotionManager {
   // Promotion methods
   template<bool promote_immediately> oop copy_to_survivor_space(oop o);
   oop oop_promotion_failed(oop obj, markWord obj_mark);
+
+  inline void reset_copy_time()                 { _copy_time = Tickspan(); }
+  inline void inc_copy_time(Tickspan t)         { _copy_time += t;}
+  inline double get_copy_time_in_ms()           { return TimeHelper::counter_to_millis(_copy_time.value()); }
+  inline void reset_copy_cycle()                { _copy_cycle = 0; }
+  inline void inc_copy_cycle(jlong c)           { _copy_cycle += c;}
+  inline double get_copy_cycle_in_ms()          { return (double)(_copy_cycle / 2400000); }
+  inline void reset_copy_size()                 { _copy_size = 0; _copy_count = 0; }
+  inline void inc_copy_size(size_t s)           { _copy_size += s; _copy_count += 1; }
+  inline double get_copy_size_in_mb()           { return _copy_size * HeapWordSize / (1024 * 1024); }
+  inline size_t get_copy_count()                  { return _copy_count; }
 
   void reset();
   void register_preserved_marks(PreservedMarks* preserved_marks);

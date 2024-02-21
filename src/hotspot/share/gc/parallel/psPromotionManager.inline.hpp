@@ -251,7 +251,13 @@ inline oop PSPromotionManager::copy_unmarked_to_survivor_space(oop o,
   assert(new_obj != nullptr, "allocation should have succeeded");
 
   // Copy obj
+  // Ticks start_t = Ticks::now();
+  // Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(o), cast_from_oop<HeapWord*>(new_obj), new_obj_size);
+  // inc_copy_time(Ticks::now() - start_t);
+  jlong start_t = os::rdtsc_amd64();
   Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(o), cast_from_oop<HeapWord*>(new_obj), new_obj_size);
+  inc_copy_cycle(os::rdtsc_amd64() - start_t);
+  inc_copy_size(new_obj_size);
 
   // Parallel GC claims with a release - so other threads might access this object
   // after claiming and they should see the "completed" object.

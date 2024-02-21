@@ -456,12 +456,31 @@ bool PSScavenge::invoke_no_policy() {
 
     // We'll use the promotion manager again later.
     PSPromotionManager* promotion_manager = PSPromotionManager::vm_thread_promotion_manager();
+    for(uint i=0; i<ParallelGCThreads; i++) {
+      PSPromotionManager::manager_array(i)->reset_copy_time();
+      PSPromotionManager::manager_array(i)->reset_copy_cycle();
+      PSPromotionManager::manager_array(i)->reset_copy_size();
+    }
+    jlong start_cycle = os::rdtsc_amd64();
     {
-      GCTraceTime(Debug, gc, phases) tm("Scavenge", &_gc_timer);
+      GCTraceTime(Info, gc, phases) tm("Scavenge", &_gc_timer);
 
       ScavengeRootsTask task(old_gen, active_workers);
       ParallelScavengeHeap::heap()->workers().run_task(&task);
     }
+    log_info(gc)("Scavenge rdtsc time %.3fms", (double)(os::rdtsc_amd64() - start_cycle) / 2400000);
+    double copy_time_in_ms = 0;
+    double copy_cycle_in_ms = 0;
+    double copy_size_in_mb = 0;
+    size_t copy_count = 0;
+    for(uint i=0; i<ParallelGCThreads; i++) {
+      copy_time_in_ms += PSPromotionManager::manager_array(i)->get_copy_time_in_ms();
+      copy_cycle_in_ms += PSPromotionManager::manager_array(i)->get_copy_cycle_in_ms();
+      copy_size_in_mb += PSPromotionManager::manager_array(i)->get_copy_size_in_mb();
+      copy_count += PSPromotionManager::manager_array(i)->get_copy_count();
+    }
+    log_info(gc)("Scavenge copy time %.3fms, size %.3fMB, num obj %lu",
+      copy_cycle_in_ms, copy_size_in_mb, copy_count);
 
     // Process reference objects discovered during scavenge
     {

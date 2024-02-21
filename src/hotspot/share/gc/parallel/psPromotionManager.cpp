@@ -214,6 +214,10 @@ void PSPromotionManager::reset() {
 
   _promotion_failed_info.reset();
 
+  reset_copy_time();
+  reset_copy_cycle();
+  reset_copy_size();
+
   TASKQUEUE_STATS_ONLY(reset_stats());
 }
 

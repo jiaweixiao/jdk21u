@@ -1802,7 +1802,29 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
     // needed by the compaction for filling holes in the dense prefix.
     adjust_roots();
 
+    uint active_gc_threads = ParallelScavengeHeap::heap()->workers().active_workers();
+    for(uint i=0; i<active_gc_threads; i++) {
+      ParCompactionManager::gc_thread_compaction_manager(i)->reset_copy_cycle();
+      ParCompactionManager::gc_thread_compaction_manager(i)->reset_copy_size();
+      ParCompactionManager::gc_thread_compaction_manager(i)->reset_skipcopy_size();
+    }
     compact();
+    double copy_cycle_in_ms = 0;
+    double copy_size_in_mb = 0;
+    size_t copy_count = 0;
+    double skipcopy_size_in_mb = 0;
+    size_t skipcopy_count = 0;
+    for(uint i=0; i<active_gc_threads; i++) {
+      copy_cycle_in_ms += ParCompactionManager::gc_thread_compaction_manager(i)->get_copy_cycle_in_ms();
+      copy_size_in_mb  += ParCompactionManager::gc_thread_compaction_manager(i)->get_copy_size_in_mb();
+      copy_count       += ParCompactionManager::gc_thread_compaction_manager(i)->get_copy_count();
+      skipcopy_size_in_mb  += ParCompactionManager::gc_thread_compaction_manager(i)->get_skipcopy_size_in_mb();
+      skipcopy_count       += ParCompactionManager::gc_thread_compaction_manager(i)->get_skipcopy_count();
+    }
+    log_info(gc)("Compact copy time %.3fms, size %.3fMB, num obj %lu",
+      copy_cycle_in_ms, copy_size_in_mb, copy_count);
+    log_info(gc)("Compact skip copy size %.3fMB, num obj %lu",
+      skipcopy_size_in_mb, skipcopy_count);
 
     ParCompactionManager::verify_all_region_stack_empty();
 
@@ -3098,7 +3120,12 @@ ParMarkBitMap::IterationStatus MoveAndUpdateClosure::copy_until_full()
 {
   if (source() != copy_destination()) {
     DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
+    jlong start_t = os::rdtsc_amd64();
     Copy::aligned_conjoint_words(source(), copy_destination(), words_remaining());
+    compaction_manager()->inc_copy_cycle(os::rdtsc_amd64() - start_t);
+    compaction_manager()->inc_copy_size(words_remaining());
+  } else {
+    compaction_manager()->inc_skipcopy_size(words_remaining());
   }
   update_state(words_remaining());
   assert(is_full(), "sanity");
@@ -3119,7 +3146,12 @@ void MoveAndUpdateClosure::copy_partial_obj()
   // that crosses the dense prefix boundary could be overwritten.
   if (source() != copy_destination()) {
     DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
+    jlong start_t = os::rdtsc_amd64();
     Copy::aligned_conjoint_words(source(), copy_destination(), words);
+    compaction_manager()->inc_copy_cycle(os::rdtsc_amd64() - start_t);
+    compaction_manager()->inc_copy_size(words);
+  } else {
+    compaction_manager()->inc_skipcopy_size(words);
   }
   update_state(words);
 }
@@ -3150,7 +3182,12 @@ MoveAndUpdateClosure::do_addr(HeapWord* addr, size_t words) {
 
   if (copy_destination() != source()) {
     DEBUG_ONLY(PSParallelCompact::check_new_location(source(), destination());)
+    jlong start_t = os::rdtsc_amd64();
     Copy::aligned_conjoint_words(source(), copy_destination(), words);
+    compaction_manager()->inc_copy_cycle(os::rdtsc_amd64() - start_t);
+    compaction_manager()->inc_copy_size(words);
+  } else {
+    compaction_manager()->inc_skipcopy_size(words);
   }
 
   oop moved_oop = cast_to_oop(copy_destination());
