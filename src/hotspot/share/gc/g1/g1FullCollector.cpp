@@ -484,6 +484,18 @@ void G1FullCollector::phase4_do_compaction() {
     assert(scope()->do_maximal_compaction(), "Only compact humongous during maximal compaction");
     task.humongous_compaction();
   }
+
+  // [gc breakdown][mem copy]
+  double copy_cycle_in_ms = 0;
+  double copy_size_in_mb = 0;
+  size_t copy_count = 0;
+  for (uint i = 0; i < workers(); i++) {
+    copy_cycle_in_ms += task.get_copy_cycle_in_ms(i);
+    copy_size_in_mb  += task.get_copy_size_in_mb(i);
+    copy_count       += task.get_copy_count(i);
+  }
+  log_info(gc)("G1 Full Compaction copy time %.3fms, size %.3fMB, num obj %lu",
+      copy_cycle_in_ms, copy_size_in_mb, copy_count);
 }
 
 void G1FullCollector::phase5_reset_metadata() {

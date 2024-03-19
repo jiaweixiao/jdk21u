@@ -88,7 +88,10 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h,
     EVAC_FAILURE_INJECTOR_ONLY(_evac_failure_inject_counter(0) COMMA)
     _preserved_marks(preserved_marks),
     _evacuation_failed_info(),
-    _evac_failure_regions(evac_failure_regions)
+    _evac_failure_regions(evac_failure_regions),
+    _copy_cycle(0),
+    _copy_size(0),
+    _copy_count(0)
 {
   // We allocate number of young gen regions in the collection set plus one
   // entries, since entry 0 keeps track of surviving bytes for non-young regions.
@@ -485,9 +488,13 @@ oop G1ParScanThreadState::do_copy_to_survivor_space(G1HeapRegionAttr const regio
     return handle_evacuation_failure_par(old, old_mark, word_sz);
   }
 
+  // [gc breakdown][mem copy]
+  jlong start_t = os::rdtsc_amd64();
   // We're going to allocate linearly, so might as well prefetch ahead.
   Prefetch::write(obj_ptr, PrefetchCopyIntervalInBytes);
   Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(old), obj_ptr, word_sz);
+  inc_copy_cycle(os::rdtsc_amd64() - start_t);
+  inc_copy_size(word_sz);
 
   const oop obj = cast_to_oop(obj_ptr);
   // Because the forwarding is done with memory_order_relaxed there is no
@@ -584,9 +591,17 @@ const size_t* G1ParScanThreadStateSet::surviving_young_words() const {
 void G1ParScanThreadStateSet::flush_stats() {
   assert(!_flushed, "thread local state from the per thread states should be flushed once");
 
+  // [gc breakdown][mem copy]
+  double copy_cycle_in_ms = 0;
+  double copy_size_in_mb = 0;
+  size_t copy_count = 0;
   for (uint worker_id = 0; worker_id < _num_workers; ++worker_id) {
     G1ParScanThreadState* pss = _states[worker_id];
     assert(pss != nullptr, "must be initialized");
+
+    copy_cycle_in_ms += pss->get_copy_cycle_in_ms();
+    copy_size_in_mb  += pss->get_copy_size_in_mb();
+    copy_count       += pss->get_copy_count();
 
     G1GCPhaseTimes* p = _g1h->phase_times();
 
@@ -603,6 +618,8 @@ void G1ParScanThreadStateSet::flush_stats() {
     delete pss;
     _states[worker_id] = nullptr;
   }
+  log_info(gc)("G1 Young copy time %.3fms, size %.3fMB, num obj %lu",
+    copy_cycle_in_ms, copy_size_in_mb, copy_count);
   _flushed = true;
 }
 

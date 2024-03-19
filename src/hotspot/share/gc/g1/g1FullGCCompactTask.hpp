@@ -39,29 +39,56 @@ class G1FullGCCompactTask : public G1FullGCTask {
   G1FullCollector* _collector;
   HeapRegionClaimer _claimer;
   G1CollectedHeap* _g1h;
+  // [gc breakdown][mem copy]
+  jlong* _copy_cycle_array;
+  size_t* _copy_size_array;
+  size_t* _copy_count_array;
 
-  void compact_region(HeapRegion* hr);
+  void compact_region(HeapRegion* hr, uint worker_id);
   void compact_humongous_obj(HeapRegion* hr);
   void free_non_overlapping_regions(uint src_start_idx, uint dest_start_idx, uint num_regions);
 
-  static void copy_object_to_new_location(oop obj);
+  static void copy_object_to_new_location(oop obj, jlong* cycles);
 
 public:
   G1FullGCCompactTask(G1FullCollector* collector) :
     G1FullGCTask("G1 Compact Task", collector),
     _collector(collector),
     _claimer(collector->workers()),
-    _g1h(G1CollectedHeap::heap()) { }
+    _g1h(G1CollectedHeap::heap()) {
+      uint num_workers = collector->workers();
+      _copy_cycle_array = NEW_C_HEAP_ARRAY(jlong,  num_workers, mtGC);
+      _copy_size_array  = NEW_C_HEAP_ARRAY(size_t, num_workers, mtGC);
+      _copy_count_array = NEW_C_HEAP_ARRAY(size_t, num_workers, mtGC);
+    }
+
+  ~G1FullGCCompactTask() {
+    FREE_C_HEAP_ARRAY(jlong,  _copy_cycle_array);
+    FREE_C_HEAP_ARRAY(size_t, _copy_size_array);
+    FREE_C_HEAP_ARRAY(size_t, _copy_count_array);
+  }
 
   void work(uint worker_id);
   void serial_compaction();
   void humongous_compaction();
 
+  inline void inc_copy_cycle(uint worker_id, jlong c)  { _copy_cycle_array[worker_id] += c; }
+  inline void inc_copy_size(uint worker_id, size_t s)  { _copy_size_array[worker_id] += s; }
+  inline void inc_copy_count(uint worker_id, size_t c) { _copy_count_array[worker_id] += c; }
+  inline double get_copy_cycle_in_ms(uint worker_id)   { return (double)(_copy_cycle_array[worker_id] / 2400000); }
+  inline double get_copy_size_in_mb(uint worker_id)    { return _copy_size_array[worker_id] * HeapWordSize / (1024 * 1024); }
+  inline size_t get_copy_count(uint worker_id)         { return _copy_count_array[worker_id]; }
+
   class G1CompactRegionClosure : public StackObj {
     G1CMBitMap* _bitmap;
     void clear_in_bitmap(oop object);
   public:
-    G1CompactRegionClosure(G1CMBitMap* bitmap) : _bitmap(bitmap) { }
+    jlong _copy_cycle;
+    size_t _copy_size;
+    size_t _copy_count;
+
+    G1CompactRegionClosure(G1CMBitMap* bitmap) :
+      _bitmap(bitmap), _copy_cycle(0), _copy_size(0), _copy_count(0) { }
     size_t apply(oop object);
   };
 };

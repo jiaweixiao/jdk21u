@@ -110,6 +110,11 @@ class G1ParScanThreadState : public CHeapObj<mtGC> {
   EvacuationFailedInfo _evacuation_failed_info;
   G1EvacFailureRegions* _evac_failure_regions;
 
+  // [gc breakdown][mem copy]
+  jlong _copy_cycle;
+  size_t _copy_size;
+  size_t _copy_count;
+
   bool inject_evacuation_failure(uint region_idx) EVAC_FAILURE_INJECTOR_RETURN_( return false; );
 
 public:
@@ -227,6 +232,13 @@ public:
   inline void remember_reference_into_optional_region(T* p);
 
   inline G1OopStarChunkedList* oops_into_optional_region(const HeapRegion* hr);
+
+  // [gc breakdown][mem copy]
+  inline void inc_copy_cycle(jlong c)  { _copy_cycle += c; }
+  inline void inc_copy_size(size_t s)  { _copy_size += s; _copy_count += 1; }
+  inline double get_copy_cycle_in_ms() { return (double)(_copy_cycle / 2400000); }
+  inline double get_copy_size_in_mb()  { return _copy_size * HeapWordSize / (1024 * 1024); }
+  inline size_t get_copy_count()       { return _copy_count; }
 };
 
 class G1ParScanThreadStateSet : public StackObj {

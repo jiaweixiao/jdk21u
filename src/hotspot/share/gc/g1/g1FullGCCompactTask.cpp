@@ -42,7 +42,12 @@ void G1FullGCCompactTask::G1CompactRegionClosure::clear_in_bitmap(oop obj) {
 size_t G1FullGCCompactTask::G1CompactRegionClosure::apply(oop obj) {
   size_t size = obj->size();
   if (obj->is_forwarded()) {
-    G1FullGCCompactTask::copy_object_to_new_location(obj);
+    // [gc breakdown][mem copy]
+    jlong cycles = 0;
+    G1FullGCCompactTask::copy_object_to_new_location(obj, &cycles);
+    _copy_cycle += cycles;
+    _copy_size += size;
+    _copy_count += 1;
   }
 
   // Clear the mark for the compacted object to allow reuse of the
@@ -51,7 +56,7 @@ size_t G1FullGCCompactTask::G1CompactRegionClosure::apply(oop obj) {
   return size;
 }
 
-void G1FullGCCompactTask::copy_object_to_new_location(oop obj) {
+void G1FullGCCompactTask::copy_object_to_new_location(oop obj, jlong* cycles) {
   assert(obj->is_forwarded(), "Sanity!");
   assert(obj->forwardee() != obj, "Object must have a new location");
 
@@ -59,14 +64,17 @@ void G1FullGCCompactTask::copy_object_to_new_location(oop obj) {
   // Copy object and reinit its mark.
   HeapWord* obj_addr = cast_from_oop<HeapWord*>(obj);
   HeapWord* destination = cast_from_oop<HeapWord*>(obj->forwardee());
+  // [gc breakdown][mem copy]
+  jlong start_t = os::rdtsc_amd64();
   Copy::aligned_conjoint_words(obj_addr, destination, size);
+  *cycles = os::rdtsc_amd64() - start_t;
 
   // There is no need to transform stack chunks - marking already did that.
   cast_to_oop(destination)->init_mark();
   assert(cast_to_oop(destination)->klass() != nullptr, "should have a class");
 }
 
-void G1FullGCCompactTask::compact_region(HeapRegion* hr) {
+void G1FullGCCompactTask::compact_region(HeapRegion* hr, uint worker_id) {
   assert(!hr->is_humongous(), "Should be no humongous regions in compaction queue");
 
   if (!collector()->is_free(hr->hrm_index())) {
@@ -79,6 +87,10 @@ void G1FullGCCompactTask::compact_region(HeapRegion* hr) {
     // clearly seen for regions with few marks.
     G1CompactRegionClosure compact(collector()->mark_bitmap());
     hr->apply_to_marked_objects(collector()->mark_bitmap(), &compact);
+    // [gc breakdown][mem copy]
+    inc_copy_cycle(worker_id, compact._copy_cycle);
+    inc_copy_size(worker_id, compact._copy_size);
+    inc_copy_count(worker_id, compact._copy_count);
   }
 
   hr->reset_compacted_after_full_gc(_collector->compaction_top(hr));
@@ -90,7 +102,7 @@ void G1FullGCCompactTask::work(uint worker_id) {
   for (GrowableArrayIterator<HeapRegion*> it = compaction_queue->begin();
        it != compaction_queue->end();
        ++it) {
-    compact_region(*it);
+    compact_region(*it, worker_id);
   }
 }
 
@@ -100,7 +112,7 @@ void G1FullGCCompactTask::serial_compaction() {
   for (GrowableArrayIterator<HeapRegion*> it = compaction_queue->begin();
        it != compaction_queue->end();
        ++it) {
-    compact_region(*it);
+    compact_region(*it, 0);
   }
 }
 
@@ -125,7 +137,12 @@ void G1FullGCCompactTask::compact_humongous_obj(HeapRegion* src_hr) {
   assert(collector()->mark_bitmap()->is_marked(obj), "Should only compact marked objects");
   collector()->mark_bitmap()->clear(obj);
 
-  copy_object_to_new_location(obj);
+  // [gc breakdown][mem copy]
+  jlong cycles = 0;
+  copy_object_to_new_location(obj, &cycles);
+  inc_copy_cycle(0, cycles);
+  inc_copy_size(0, word_size);
+  inc_copy_count(0, 1);
 
   uint dest_start_idx = _g1h->addr_to_region(destination);
   // Update the metadata for the destination regions.
