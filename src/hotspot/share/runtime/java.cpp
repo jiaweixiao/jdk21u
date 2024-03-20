@@ -450,7 +450,7 @@ void before_exit(JavaThread* thread, bool halt) {
 
 
   // Actual shutdown logic begins here.
-  os::dump_thread_majflt_and_cputime();
+  os::dump_thread_region_majflt();
 
 #if INCLUDE_JVMCI
   if (EnableJVMCI) {
@@ -484,7 +484,21 @@ void before_exit(JavaThread* thread, bool halt) {
   // Stop concurrent GC threads
   Universe::heap()->stop();
 
-  log_info(gc)("Majflt(exit jvm)=%ld", os::accumMajflt());
+  // [gc breakdown][region majflt]
+  if (UseProfileRegionMajflt) {
+    log_info(gc)("Majflt(exit jvm)=%ld", os::accumMajflt());
+
+    RegionMajfltStats sys_stats, proc_stats;
+    os::get_system_region_majflt_stats(&sys_stats);
+    os::accum_proc_region_majflt(&proc_stats);
+    log_info(gc)("SysRegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
+      sys_stats.majflt, sys_stats.majflt_in_region, sys_stats.majflt_out_region);
+    log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
+      proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+  
+    os::region_majflt_dump_bitmap();
+    os::free_majflt_region_bitmap();
+  }
 
   // Print GC/heap related information.
   Log(gc, heap, exit) log;

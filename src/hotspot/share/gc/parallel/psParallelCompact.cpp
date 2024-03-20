@@ -1736,7 +1736,8 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
   _gc_tracer.report_gc_start(heap->gc_cause(), _gc_timer.gc_start());
 
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
 
   GCCause::Cause gc_cause = heap->gc_cause();
   PSYoungGen* young_gen = heap->young_gen();
@@ -1930,9 +1931,7 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
   _gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
 
-  
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(full)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("full");
 
   return true;
 }

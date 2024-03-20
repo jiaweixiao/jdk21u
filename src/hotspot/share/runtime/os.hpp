@@ -152,6 +152,12 @@ typedef void (*java_call_t)(JavaValue* value, const methodHandle& method, JavaCa
 
 class MallocTracker;
 
+struct RegionMajfltStats {
+  size_t majflt;
+  size_t majflt_in_region;
+  size_t majflt_out_region;
+};
+
 class os: AllStatic {
   friend class VMStructs;
   friend class JVMCIVMStructs;
@@ -286,6 +292,23 @@ class os: AllStatic {
   static void current_thread_majflt_and_cputime(long* majflt, long* user_time, long* sys_time);
   // Dump the number of page major fault, user and sys time of java and non-java threads.
   static void dump_thread_majflt_and_cputime();
+
+  // [gc breakdown][region majflt]
+  static void init_majflt_region_bitmap(size_t base, size_t region_number, size_t region_size);
+  static void free_majflt_region_bitmap();
+  static void region_majflt_remove_all_regions();
+  static void region_majflt_remove_region(uint region_id);
+  static void region_majflt_add_region(uint region_id);
+  // Add consecutive regions [0, region_id]
+  static void region_majflt_add_from_start(uint region_id);
+  // Add consecutive regions [region_id, region_number)
+  static void region_majflt_add_till_end(uint region_id);
+  static void region_majflt_dump_bitmap();
+  static void reset_system_region_majflt_stats();
+  static void get_system_region_majflt_stats(RegionMajfltStats* stats);
+  static void accum_proc_region_majflt(RegionMajfltStats* stats);
+  static void current_thread_region_majflt(RegionMajfltStats* stats);
+  static void dump_thread_region_majflt();
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone

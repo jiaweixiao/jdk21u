@@ -400,6 +400,17 @@ size_t lcm(size_t a, size_t b) {
     return size_t(result);
 }
 
+// greatest common divisor
+size_t gcd(size_t a, size_t b) {
+  while (b != 0) {
+    size_t temp = b;
+    b = a % b;
+    a = temp;
+  }
+
+  return a;
+}
+
 
 // Test that nth_bit macro and friends behave as
 // expected, even with low-precedence operators.

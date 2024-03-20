@@ -829,6 +829,9 @@ inline jlong min_signed_integer(BasicType bt) {
 // least common multiple
 extern size_t lcm(size_t a, size_t b);
 
+// Auxiliary math routines
+// greatest common divisor
+extern size_t gcd(size_t a, size_t b);
 
 // NOTE: replicated in SA in vm/agent/sun/jvm/hotspot/runtime/BasicType.java
 enum BasicTypeSize {

@@ -39,4 +39,19 @@ class GCStats : public CHeapObj<mtGC> {
   AdaptivePaddedNoZeroDevAverage*  avg_promoted() const { return _avg_promoted; }
 };
 
+class GCMajfltStats {
+  size_t             _stt_majflt;
+  RegionMajfltStats* _stt_sys_stats;
+  RegionMajfltStats* _end_sys_stats;
+  RegionMajfltStats* _stt_proc_stats;
+  RegionMajfltStats* _end_proc_stats;
+
+public:
+  GCMajfltStats();
+  ~GCMajfltStats();
+
+  void start();
+  void end_and_log(const char* cause);
+};
+
 #endif // SHARE_GC_SHARED_GCSTATS_HPP

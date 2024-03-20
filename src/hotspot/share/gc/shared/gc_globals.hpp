@@ -110,6 +110,9 @@
                                                                             \
   /* gc */                                                                  \
                                                                             \
+  product(bool, UseProfileRegionMajflt, false,                              \
+          "Enable profile region majflt")                                   \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \

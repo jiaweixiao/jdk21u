@@ -1507,6 +1507,119 @@ void os::dump_thread_majflt_and_cputime() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// [gc breakdown][region majflt] profile majflt by region support
+void os::init_majflt_region_bitmap(size_t base, size_t region_number, size_t region_size) {
+  syscall(453, base, region_number, region_size);
+}
+
+void os::free_majflt_region_bitmap() {
+  uint mode = 0;
+  syscall(454, mode, 0);
+}
+
+void os::region_majflt_remove_all_regions() {
+  uint mode = 1;
+  syscall(454, mode, 0);
+}
+
+void os::region_majflt_remove_region(uint region_id) {
+  uint mode = 2;
+  syscall(454, mode, region_id);
+}
+
+void os::region_majflt_add_region(uint region_id) {
+  uint mode = 3;
+  syscall(454, mode, region_id);
+}
+
+// Add consecutive regions [0, region_id]
+void os::region_majflt_add_from_start(uint region_id) {
+  uint mode = 4;
+  syscall(454, mode, region_id);
+}
+
+// Add consecutive regions [region_id, region_number)
+void os::region_majflt_add_till_end(uint region_id) {
+  uint mode = 5;
+  syscall(454, mode, region_id);
+}
+
+void os::region_majflt_dump_bitmap() {
+  uint mode = 999;
+  syscall(454, mode, 0);
+}
+
+void os::reset_system_region_majflt_stats() {
+  syscall(451);
+}
+
+void os::get_system_region_majflt_stats(RegionMajfltStats* stats) {
+  syscall(452, stats);
+}
+
+inline void proc_statmajflt(const char* fname, RegionMajfltStats* stats) {
+  // Get the majflt field from /proc/<pid>/<tid>/statmajflt
+  char *s;
+  char stat[2048];
+  int statlen;
+  int count;
+  size_t uldummy;
+  FILE *fp;
+
+  fp = os::fopen(fname, "r");
+  if (fp == nullptr) return;
+  statlen = fread(stat, 1, 2047, fp);
+  stat[statlen] = '\0';
+  fclose(fp);
+
+  s = stat;
+  // Skip blank chars
+  while (s && isspace(*s)) { s++; };
+
+  count = sscanf(s,"%lu %lu %lu %lu %lu",
+                 &(stats->majflt), &(stats->majflt_in_region), &(stats->majflt_out_region),
+                 &uldummy, &uldummy);
+  if (count != 5) {
+    stats->majflt = 0;
+    stats->majflt_in_region = 0;
+    stats->majflt_out_region = 0;
+  }
+}
+
+void os::accum_proc_region_majflt(RegionMajfltStats* stats) {
+  proc_statmajflt("/proc/self/statmajflt", stats);
+}
+
+void os::current_thread_region_majflt(RegionMajfltStats* stats) {
+  char proc_name[64];
+  snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", Thread::current()->osthread()->thread_id());
+  proc_statmajflt(proc_name, stats);
+}
+
+void os::dump_thread_region_majflt() {
+  pid_t tid;
+  char proc_name[64];
+  RegionMajfltStats stats;
+
+  for (JavaThreadIteratorWithHandle jtiwh; JavaThread *jt = jtiwh.next(); ) {
+    tid = jt->osthread()->thread_id();
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
+      jt->name(), tid, stats.majflt, stats.majflt_in_region, stats.majflt_out_region);
+  }
+
+  for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
+    NonJavaThread* njt = njti.current();
+    tid = njt->osthread()->thread_id();
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
+      njt->name(), tid, stats.majflt, stats.majflt_in_region, stats.majflt_out_region);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // time support
 double os::elapsedVTime() {
   struct rusage usage;

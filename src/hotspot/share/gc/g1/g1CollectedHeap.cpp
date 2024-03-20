@@ -941,11 +941,11 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
   // the caller that the collection did not succeed (e.g., because it was locked
   // out by the GC locker). So, right now, we'll ignore the return value.
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   do_full_collection(clear_all_soft_refs,
                      false /* do_maximal_compaction */);
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(full)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("full");
 }
 
 bool G1CollectedHeap::upgrade_to_full_collection() {
@@ -1433,6 +1433,18 @@ jint G1CollectedHeap::initialize() {
   _hrm.initialize(heap_storage, bitmap_storage, bot_storage, cardtable_storage);
   _card_table->initialize(cardtable_storage);
 
+  // 
+  // [gc breakdown][region majflt]
+  // G1 manages heap in same and fixed size regions at startup.
+  // 
+  // Init majflt region bitmap
+  if (UseProfileRegionMajflt) {
+    os::init_majflt_region_bitmap((uintptr_t)_hrm.reserved().start(),
+      _hrm.max_length(), HeapRegion::GrainBytes);
+    log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
+      p2i(_hrm.reserved().start()), _hrm.max_length());
+  }
+
   // 6843694 - ensure that the maximum region index can fit
   // in the remembered set structures.
   const uint max_region_idx = (1U << (sizeof(RegionIdx_t)*BitsPerByte-1)) - 1;
@@ -1526,6 +1538,12 @@ jint G1CollectedHeap::initialize() {
   evac_failure_injector()->reset();
 
   G1InitLogger::print();
+
+  // [gc breakdown][region majflt]
+  // Dump bitmap to dmesg
+  if (UseProfileRegionMajflt) {
+    os::region_majflt_dump_bitmap();
+  }
 
   return JNI_OK;
 }
@@ -2576,12 +2594,12 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   bool should_start_concurrent_mark_operation = collector_state()->in_concurrent_start_gc();
 
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   // Perform the collection.
   G1YoungCollector collector(gc_cause());
   collector.collect();
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(young)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("young");
 
   // It should now be safe to tell the concurrent mark thread to start
   // without its logging output interfering with the logging output
