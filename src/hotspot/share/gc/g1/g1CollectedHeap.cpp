@@ -941,11 +941,11 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
   // the caller that the collection did not succeed (e.g., because it was locked
   // out by the GC locker). So, right now, we'll ignore the return value.
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   do_full_collection(clear_all_soft_refs,
                      false /* do_maximal_compaction */);
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(full)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("full");
 }
 
 bool G1CollectedHeap::upgrade_to_full_collection() {
@@ -2576,12 +2576,12 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   bool should_start_concurrent_mark_operation = collector_state()->in_concurrent_start_gc();
 
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   // Perform the collection.
   G1YoungCollector collector(gc_cause());
   collector.collect();
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(young)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("young");
 
   // It should now be safe to tell the concurrent mark thread to start
   // without its logging output interfering with the logging output
