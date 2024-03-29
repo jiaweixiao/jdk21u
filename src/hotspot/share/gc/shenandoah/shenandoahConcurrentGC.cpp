@@ -102,15 +102,17 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
   ShenandoahHeap* const heap = ShenandoahHeap::heap();
   ShenandoahBreakpointGCScope breakpoint_gc_scope(cause);
 
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+
   // Reset for upcoming marking
   entry_reset();
 
   // Start initial mark under STW
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  gc_majflt_stats.start();
   vmop_entry_init_mark();
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(init mark)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("init mark");
 
   {
     ShenandoahBreakpointMarkScope breakpoint_mark_scope(cause);
@@ -125,10 +127,9 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
 
   // Complete marking under STW, and start evacuation
   // [gc breakdown]
-  _start_majflt = os::accumMajflt();
+  gc_majflt_stats.start();
   vmop_entry_final_mark();
-  _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(final mark)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("final mark");
 
   // Concurrent stack processing
   if (heap->is_evacuation_in_progress()) {
@@ -173,10 +174,9 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
 
     // Perform update-refs phase.
     // [gc breakdown]
-    _start_majflt = os::accumMajflt();
+    gc_majflt_stats.start();
     vmop_entry_init_updaterefs();
-    _end_majflt = os::accumMajflt();
-    log_info(gc)("Majflt(init update refs)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+    gc_majflt_stats.end_and_log("init update refs");
 
     entry_updaterefs();
     if (check_cancellation_and_abort(ShenandoahDegenPoint::_degenerated_updaterefs)) return false;
@@ -186,19 +186,17 @@ bool ShenandoahConcurrentGC::collect(GCCause::Cause cause) {
     if (check_cancellation_and_abort(ShenandoahDegenPoint::_degenerated_updaterefs)) return false;
 
     // [gc breakdown]
-    _start_majflt = os::accumMajflt();
+    gc_majflt_stats.start();
     vmop_entry_final_updaterefs();
-    _end_majflt = os::accumMajflt();
-    log_info(gc)("Majflt(final update refs)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+    gc_majflt_stats.end_and_log("final update refs");
 
     // Update references freed up collection set, kick the cleanup to reclaim the space.
     entry_cleanup_complete();
   } else {
     // [gc breakdown]
-    _start_majflt = os::accumMajflt();
+    gc_majflt_stats.start();
     vmop_entry_final_roots();
-    _end_majflt = os::accumMajflt();
-    log_info(gc)("Majflt(final roots)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+    gc_majflt_stats.end_and_log("final roots");
   }
 
   return true;

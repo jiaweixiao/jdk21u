@@ -190,10 +190,10 @@ bool G1ConcurrentMarkThread::phase_mark_loop() {
 
     // Subphase 4: Remark pause
     // [gc breakdown]
-    unsigned long _start_majflt = os::accumMajflt();
+    GCMajfltStats gc_majflt_stats;
+    gc_majflt_stats.start();
     if (subphase_remark()) return true;
-    unsigned long _end_majflt = os::accumMajflt();
-    log_info(gc)("Majflt(remark)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+    gc_majflt_stats.end_and_log("remark");
 
     // Check if we need to restart the marking loop.
     if (!mark_loop_needs_restart()) break;
@@ -302,10 +302,10 @@ void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
 
   // Phase 5: Cleanup pause
   // [gc breakdown]
-  unsigned long _start_majflt = os::accumMajflt();
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   if (phase_cleanup()) return;
-  unsigned long _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(cleanup)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
+  gc_majflt_stats.end_and_log("cleanup");
 
   // Phase 6: Clear CLD claimed marks.
   if (phase_clear_cld_claimed_marks()) return;
