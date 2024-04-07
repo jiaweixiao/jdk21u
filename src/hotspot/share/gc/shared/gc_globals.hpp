@@ -110,6 +110,9 @@
                                                                             \
   /* gc */                                                                  \
                                                                             \
+  product(bool, UseProfileSwapFault, false,                                 \
+          "Enable to profile swap fault by kernel.")                        \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \

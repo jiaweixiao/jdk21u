@@ -282,6 +282,20 @@ class os: AllStatic {
   // [gc breakdown]
   // Return the number of page major fault of the process.
   static unsigned long get_accum_majflt();
+  // [gc breakdown][swap fault] profile swap fault
+  struct kernel_swap_stats {
+    uint64_t demand_swapin_cnt;                 // number of page fault that need swapin and page io
+    uint64_t demand_swapin_time_us;             // time in us
+    uint64_t non_demand_swapin_cnt;             // number of page fault that need swapin and no page io
+    uint64_t non_demand_swapin_time_us;         // time in us
+    uint64_t swapin_blocked_by_swapout_cnt;     // number of page fault that need swapin and page io and blocked by swapout
+    uint64_t swapin_blocked_by_swapout_time_us; // time in us
+    uint64_t non_swap_cnt;                      // number of page fault that not need swapin
+    uint64_t non_swap_time_us;                  // time in us
+  };
+  static void reset_kernel_swap_stats();
+  static void get_accum_kernel_swap_stats(kernel_swap_stats* stats);
+  static void print_accum_kernel_swap_stats(const char *cause);
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone

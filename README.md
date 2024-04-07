@@ -22,3 +22,8 @@ tracking.
 ```bash
 -Xms32g -Xmx32g -XX:+UseParallelGC -XX:+UseParallelFullScavengeGC -XX:NewSize=32g -XX:MaxNewSize=32g -XX:SurvivorRatio=1 -XX:-UseAdaptiveSizePolicy
 ```
+
+## Profile swap fault in kernel
+https://github.com/jiaweixiao/linux-5.11/tree/profile-swap-fault
+Enable profile with flag `-XX:+UseProfileSwapFault`.
+

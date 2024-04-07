@@ -838,7 +838,11 @@ jint universe_init() {
 jint Universe::initialize_heap() {
   assert(_collectedHeap == nullptr, "Heap already created");
 
-  log_info(gc)("Majflt(init heap)=%ld", os::get_accum_majflt());
+  if (UseProfileSwapFault) { 
+    log_info(gc)("Majflt(init heap)=%ld", os::get_accum_majflt());
+    os::reset_kernel_swap_stats();
+    os::print_accum_kernel_swap_stats("init heap");
+  }
 
   _collectedHeap = GCConfig::arguments()->create_heap();
 

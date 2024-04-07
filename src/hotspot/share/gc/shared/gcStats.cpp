@@ -30,16 +30,45 @@
 GCStats::GCStats() : _avg_promoted(new AdaptivePaddedNoZeroDevAverage(AdaptiveSizePolicyWeight, PromotedPadding)) {}
 
 GCMajfltStats::GCMajfltStats() : _stt_majflt(0) {
+  if (UseProfileSwapFault) { 
+    _stt_kernel_swap_stats = NEW_RESOURCE_OBJ(os::kernel_swap_stats);
+    _end_kernel_swap_stats = NEW_RESOURCE_OBJ(os::kernel_swap_stats);
+  }
 }
 
 GCMajfltStats::~GCMajfltStats() {
+  if (UseProfileSwapFault) { 
+    FREE_RESOURCE_ARRAY(os::kernel_swap_stats, _stt_kernel_swap_stats, 1);
+    FREE_RESOURCE_ARRAY(os::kernel_swap_stats, _end_kernel_swap_stats, 1);
+  }
 }
 
 void GCMajfltStats::start() {
-  _stt_majflt = os::get_accum_majflt();
+  if (UseProfileSwapFault) { 
+    _stt_majflt = os::get_accum_majflt();
+    os::get_accum_kernel_swap_stats(_stt_kernel_swap_stats);
+  }
 }
 
 void GCMajfltStats::end_and_log(const char* cause) {
-  size_t _end_majflt = os::get_accum_majflt();
-  log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
+  if (UseProfileSwapFault) { 
+    size_t _end_majflt = os::get_accum_majflt();
+    log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
+
+    os::get_accum_kernel_swap_stats(_end_kernel_swap_stats);
+    log_info(gc)("DemandSwapin(%s)=%ld(%ld -> %ld) %.0fms(%.0fms -> %.0fms), "\
+                 "NonDemandSwapin=%ld(%ld -> %ld) %.0fms(%.0fms -> %.0fms), "\
+                 "SwapinBlockedBySwapout=%ld(%ld -> %ld) %.0fms(%.0fms -> %.0fms), "
+                 "NonSwap=%ld(%ld -> %ld) %.0fms(%.0fms -> %.0fms)",
+                cause,
+                _end_kernel_swap_stats->demand_swapin_cnt                        - _stt_kernel_swap_stats->demand_swapin_cnt,                       _stt_kernel_swap_stats->demand_swapin_cnt,                       _end_kernel_swap_stats->demand_swapin_cnt,
+                _end_kernel_swap_stats->demand_swapin_time_us / 1e3              - _stt_kernel_swap_stats->demand_swapin_time_us / 1e3,             _stt_kernel_swap_stats->demand_swapin_time_us / 1e3,             _end_kernel_swap_stats->demand_swapin_time_us / 1e3,
+                _end_kernel_swap_stats->non_demand_swapin_cnt                    - _stt_kernel_swap_stats->non_demand_swapin_cnt,                   _stt_kernel_swap_stats->non_demand_swapin_cnt,                   _end_kernel_swap_stats->non_demand_swapin_cnt,
+                _end_kernel_swap_stats->non_demand_swapin_time_us  / 1e3         - _stt_kernel_swap_stats->non_demand_swapin_time_us / 1e3,         _stt_kernel_swap_stats->non_demand_swapin_time_us / 1e3,         _end_kernel_swap_stats->non_demand_swapin_time_us / 1e3,
+                _end_kernel_swap_stats->swapin_blocked_by_swapout_cnt            - _stt_kernel_swap_stats->swapin_blocked_by_swapout_cnt,           _stt_kernel_swap_stats->swapin_blocked_by_swapout_cnt,           _end_kernel_swap_stats->swapin_blocked_by_swapout_cnt,
+                _end_kernel_swap_stats->swapin_blocked_by_swapout_time_us  / 1e3 - _stt_kernel_swap_stats->swapin_blocked_by_swapout_time_us / 1e3, _stt_kernel_swap_stats->swapin_blocked_by_swapout_time_us / 1e3, _end_kernel_swap_stats->swapin_blocked_by_swapout_time_us / 1e3,
+                _end_kernel_swap_stats->non_swap_cnt                             - _stt_kernel_swap_stats->non_swap_cnt,                            _stt_kernel_swap_stats->non_swap_cnt,                            _end_kernel_swap_stats->non_swap_cnt,
+                _end_kernel_swap_stats->non_swap_time_us / 1e3                   - _stt_kernel_swap_stats->non_swap_time_us / 1e3,                  _stt_kernel_swap_stats->non_swap_time_us / 1e3,                  _end_kernel_swap_stats->non_swap_time_us / 1e3
+    );
+  }
 }

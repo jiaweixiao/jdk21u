@@ -1437,6 +1437,36 @@ unsigned long os::get_accum_majflt() {
   return proc_majflt("/proc/self/stat");
 }
 
+// [gc breakdown][swap fault] profile swap fault
+static inline void reset_swap_stats_to_kernel(){
+  syscall(451);
+}
+
+static inline void get_swap_stats_from_kernel(os::kernel_swap_stats* stats){
+  syscall(452, stats);
+}
+
+void os::reset_kernel_swap_stats(){
+  reset_swap_stats_to_kernel();
+}
+
+void os::get_accum_kernel_swap_stats(kernel_swap_stats* stats)
+{
+  get_swap_stats_from_kernel(stats);
+}
+
+void os::print_accum_kernel_swap_stats(const char *cause)
+{
+  kernel_swap_stats stats;
+  get_swap_stats_from_kernel(&stats);
+  log_info(gc)("DemandSwapin(%s)=%ld(%.0fms), NonDemandSwapin=%ld(%.0fms), SwapinBlockedBySwapout=%ld(%.0fms), NonSwap=%ld(%.0fms)",
+              cause, stats.demand_swapin_cnt,      stats.demand_swapin_time_us / 1e3,
+              stats.non_demand_swapin_cnt,         stats.non_demand_swapin_time_us / 1e3,
+              stats.swapin_blocked_by_swapout_cnt, stats.swapin_blocked_by_swapout_time_us / 1e3,
+              stats.non_swap_cnt,                  stats.non_swap_time_us / 1e3
+  );
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // time support
 double os::elapsedVTime() {

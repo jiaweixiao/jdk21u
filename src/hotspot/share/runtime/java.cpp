@@ -483,7 +483,10 @@ void before_exit(JavaThread* thread, bool halt) {
   // Stop concurrent GC threads
   Universe::heap()->stop();
 
-  log_info(gc)("Majflt(exit jvm)=%ld", os::get_accum_majflt());
+  if (UseProfileSwapFault) { 
+    log_info(gc)("Majflt(exit jvm)=%ld", os::get_accum_majflt());
+    os::print_accum_kernel_swap_stats("exit jvm");
+  }
 
   // Print GC/heap related information.
   Log(gc, heap, exit) log;

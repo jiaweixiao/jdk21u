@@ -42,6 +42,8 @@ class GCStats : public CHeapObj<mtGC> {
 // Class used to profile and save gc majflt stats
 class GCMajfltStats {
   size_t _stt_majflt;
+  os::kernel_swap_stats* _stt_kernel_swap_stats;
+  os::kernel_swap_stats* _end_kernel_swap_stats;
 
 public:
   GCMajfltStats();
