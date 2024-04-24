@@ -726,13 +726,13 @@ void JavaThread::thread_main_inner() {
 
 // Shared teardown for all JavaThreads
 void JavaThread::post_run() {
-  // [gc breakdown][region majflt]
+  // [gc breakdown][range majflt]
   if (UseProfileRegionMajflt) {
-    RegionMajfltStats proc_stats;
-    os::current_thread_region_majflt(&proc_stats);
+    RangeMajfltStats proc_stats;
+    os::current_thread_range_majflt(&proc_stats);
     log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
       this->name(), Thread::current()->osthread()->thread_id(),
-      proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+      proc_stats.majflt, proc_stats.majflt_in_range0, proc_stats.majflt_in_range1);
   }
   this->exit(false);
   this->unregister_thread_stack_with_NMT();

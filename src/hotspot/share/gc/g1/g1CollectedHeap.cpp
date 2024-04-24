@@ -1433,18 +1433,6 @@ jint G1CollectedHeap::initialize() {
   _hrm.initialize(heap_storage, bitmap_storage, bot_storage, cardtable_storage);
   _card_table->initialize(cardtable_storage);
 
-  // 
-  // [gc breakdown][region majflt]
-  // G1 manages heap in same and fixed size regions at startup.
-  // 
-  // Init majflt region bitmap
-  if (UseProfileRegionMajflt) {
-    os::init_majflt_region_bitmap((uintptr_t)_hrm.reserved().start(),
-      _hrm.max_length(), HeapRegion::GrainBytes);
-    log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
-      p2i(_hrm.reserved().start()), _hrm.max_length());
-  }
-
   // 6843694 - ensure that the maximum region index can fit
   // in the remembered set structures.
   const uint max_region_idx = (1U << (sizeof(RegionIdx_t)*BitsPerByte-1)) - 1;
@@ -1538,12 +1526,6 @@ jint G1CollectedHeap::initialize() {
   evac_failure_injector()->reset();
 
   G1InitLogger::print();
-
-  // [gc breakdown][region majflt]
-  // Dump bitmap to dmesg
-  if (UseProfileRegionMajflt) {
-    os::region_majflt_dump_bitmap();
-  }
 
   return JNI_OK;
 }

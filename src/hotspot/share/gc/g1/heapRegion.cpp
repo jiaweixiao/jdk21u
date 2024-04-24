@@ -150,12 +150,6 @@ double HeapRegion::calc_gc_efficiency() {
 void HeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
 
-  // [gc breakdown][region majflt]
-  // Delete a old or humongous region.
-  if (UseProfileRegionMajflt && _type.is_old_or_humongous()) {
-    os::region_majflt_remove_region(_hrm_index);
-  }
-
   _type.set_free();
 }
 
@@ -176,25 +170,12 @@ void HeapRegion::set_survivor() {
 
 void HeapRegion::move_to_old() {
   if (_type.relabel_as_old()) {
-    // [gc breakdown][region majflt]
-    // Change from [free, eden, survivor] to old region.
-    // Insert a old region.
-    if (UseProfileRegionMajflt) {
-      os::region_majflt_add_region(_hrm_index);
-    }
-
     report_region_type_change(G1HeapRegionTraceType::Old);
   }
 }
 
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
-
-  // [gc breakdown][region majflt]
-  // Insert a old region.
-  if (UseProfileRegionMajflt) {
-    os::region_majflt_add_region(_hrm_index);
-  }
 
   _type.set_old();
 }
@@ -204,12 +185,6 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
   assert(top() == bottom(), "should be empty");
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
-
-  // [gc breakdown][region majflt]
-  // insert a humongous retion
-  if (UseProfileRegionMajflt) {
-    os::region_majflt_add_region(_hrm_index);
-  }
 
   _type.set_starts_humongous();
   _humongous_start_region = this;
@@ -223,12 +198,6 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
   assert(first_hr->is_starts_humongous(), "pre-condition");
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
-
-  // [gc breakdown][region majflt]
-  // Insert a humongous region.
-  if (UseProfileRegionMajflt) {
-    os::region_majflt_add_region(_hrm_index);
-  }
 
   _type.set_continues_humongous();
   _humongous_start_region = first_hr;

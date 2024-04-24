@@ -25,17 +25,16 @@ tracking.
 
 ## Profile majflt of young and old space
 ### Require linux kernel
-https://github.com/jiaweixiao/linux-5.11/tree/jdk-region-majflt?tab=readme-ov-file#profiling  
+https://github.com/jiaweixiao/linux-5.11/tree/jdk-range-majflt?tab=readme-ov-file#profiling  
 ### Usage
-Support psnew, psmc, ps and g1 gc.  
+Support psnew, psmc and ps.  
 Enable profiling with flag `-XX:+UseProfileRegionMajflt`.
 ### Result format
 The result is logged in gclog. 
 * `Majflt` is read from `/proc/self/stat`.  
 * `SysRegionMajflt` is system wide.  
 * `RegionMajflt` is read from `/proc/self/statmajflt` or `/proc/self/<tid>/statmajflt`.  
-* `In region` is majflt in old space, and `out region` is majflt in young space.  
-* `Majflt - in_region - out_region` is majflt in process but out of heap space.  
+* `In region` is majflt in young space, and `out region` is majflt in old space.  
 #### On JVM init and exit
 ```text
 [0.008s][47675][info][gc     ] Majflt(init heap)=3
