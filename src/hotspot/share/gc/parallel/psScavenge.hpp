@@ -80,6 +80,10 @@ class PSScavenge: AllStatic {
   static PSCardTable* const card_table()           { assert(_card_table != nullptr, "Sanity"); return _card_table; }
   static const ParallelScavengeTracer* gc_tracer() { return &_gc_tracer; }
 
+  static void pretouch_all_pages_in_space(MutableSpace* space);
+
+  static void pretouch_all_pages(int times);
+
  public:
   // Accessors
   static uint             tenuring_threshold()  { return _tenuring_threshold; }

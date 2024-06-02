@@ -150,6 +150,13 @@ void PSYoungGen::compute_initial_space_boundaries() {
   assert(size >= 3 * SpaceAlignment, "Young space is not large enough for eden + 2 survivors");
 
   size_t survivor_size = size / InitialSurvivorRatio;
+  if(EdenSize != 0){
+    survivor_size = (size - EdenSize) / 2;
+    log_info(gc)("eden size: %lu", EdenSize);
+    log_info(gc)("size: %lu", size);
+    log_info(gc)("survivor_size: %lu", survivor_size);
+  }
+  
   survivor_size = align_down(survivor_size, SpaceAlignment);
   // ... but never less than an alignment
   survivor_size = MAX2(survivor_size, SpaceAlignment);

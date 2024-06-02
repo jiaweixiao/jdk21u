@@ -631,6 +631,11 @@
           "Ratio of eden/survivor space size")                              \
           range(1, max_uintx-2)                                             \
           constraint(SurvivorRatioConstraintFunc,AfterMemoryInit)           \
+  product(size_t, EdenSize, 0,                                              \
+          "Initial new generation size (in bytes)")                         \
+          constraint(NewSizeConstraintFunc,AfterErgo)                       \
+  product(size_t, EdenFromPretouches, 0,                                    \
+          "number of pretouches to from and eden space before young gc")    \
                                                                             \
   product(uintx, NewRatio, 2,                                               \
           "Ratio of old/new generation sizes")                              \

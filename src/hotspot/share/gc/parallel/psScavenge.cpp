@@ -353,6 +353,35 @@ public:
   }
 };
 
+void PSScavenge::pretouch_all_pages_in_space(MutableSpace* space){
+  HeapWord* bottom = space->bottom();
+  HeapWord* end = space->end();
+  const int step = 4 * 1024 / sizeof(HeapWord);
+  int toucher = 0;
+
+  for(HeapWord* p = bottom; p < end; p += step){
+    toucher += *(int* )p;
+  }
+  log_info(gc)("just touch %d", toucher);
+}
+
+void PSScavenge::pretouch_all_pages(int times){
+  ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
+  PSYoungGen* young_gen = heap->young_gen();
+  
+  long eden_size = (long)(young_gen->eden_space()->end() - young_gen->eden_space()->bottom()) * (long)sizeof(HeapWord);
+  long from_size = (long)(young_gen->from_space()->end() - young_gen->from_space()->bottom()) * (long)sizeof(HeapWord);
+  long to_size = (long)(young_gen->to_space()->end() - young_gen->to_space()->bottom()) * (long)sizeof(HeapWord);
+
+  log_info(gc)("young size: %ld %ld", (eden_size + from_size + to_size), (eden_size + from_size + to_size) / 1024l / 1024l);
+  for(int i = 0; i < times; i++){
+    pretouch_all_pages_in_space(young_gen->eden_space());
+    pretouch_all_pages_in_space(young_gen->from_space());
+    pretouch_all_pages_in_space(young_gen->to_space());
+  }
+    
+}
+
 // This method contains no policy. You should probably
 // be calling invoke() instead.
 bool PSScavenge::invoke_no_policy() {
@@ -361,8 +390,23 @@ bool PSScavenge::invoke_no_policy() {
 
   _gc_timer.register_gc_start();
 
-  // [gc breakdown]
   unsigned long _start_majflt = os::accumMajflt();
+
+  pretouch_all_pages(EdenFromPretouches);
+
+  unsigned long _pretouch_end_majflt = os::accumMajflt();
+  log_info(gc)("Majflt(young pretouch)=%ld (%ld -> %ld)", _pretouch_end_majflt - _start_majflt , _start_majflt, _pretouch_end_majflt);
+
+  _start_majflt = os::accumMajflt();
+
+  pretouch_all_pages(EdenFromPretouches);
+
+  _pretouch_end_majflt = os::accumMajflt();
+  log_info(gc)("Majflt(young pretouch 2)=%ld (%ld -> %ld)", _pretouch_end_majflt - _start_majflt , _start_majflt, _pretouch_end_majflt);
+
+
+  // [gc breakdown]
+  _start_majflt = os::accumMajflt();
 
   if (GCLocker::check_active_before_gc()) {
     return false;
