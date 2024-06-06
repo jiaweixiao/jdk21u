@@ -921,6 +921,10 @@ bool G1CollectedHeap::do_full_collection(bool clear_all_soft_refs,
     return false;
   }
 
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
+
   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
       soft_ref_policy()->should_clear_all_soft_refs();
 
@@ -932,6 +936,8 @@ bool G1CollectedHeap::do_full_collection(bool clear_all_soft_refs,
   collector.collect();
   collector.complete_collection();
 
+  gc_majflt_stats.end_and_log("full");
+
   // Full collection was successfully completed.
   return true;
 }
@@ -940,12 +946,8 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
   // Currently, there is no facility in the do_full_collection(bool) API to notify
   // the caller that the collection did not succeed (e.g., because it was locked
   // out by the GC locker). So, right now, we'll ignore the return value.
-  // [gc breakdown]
-  GCMajfltStats gc_majflt_stats;
-  gc_majflt_stats.start();
   do_full_collection(clear_all_soft_refs,
                      false /* do_maximal_compaction */);
-  gc_majflt_stats.end_and_log("full");
 }
 
 bool G1CollectedHeap::upgrade_to_full_collection() {
