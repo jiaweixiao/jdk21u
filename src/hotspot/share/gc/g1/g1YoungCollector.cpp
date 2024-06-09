@@ -560,8 +560,6 @@ public:
     EventGCPhaseParallel event;
     G1ParScanThreadState* const pss = par_scan_state();
     pss->trim_queue();
-    jlong thread_end = Rdtsc::raw();
-    log_info(gc)("worker %u elapsed %lums", _worker_id, (thread_end - _thread_start)/1000000);
 
     event.commit(GCId::current(), pss->worker_id(), G1GCPhaseTimes::phase_name(_phase));
     do {
@@ -606,7 +604,7 @@ protected:
     G1GCPhaseTimes* p = _g1h->phase_times();
 
     Ticks start = Ticks::now();
-    G1ParEvacuateFollowersClosure cl(_g1h, pss, _task_queues, &_terminator, objcopy_phase, thread_start, worker_id);
+    G1ParEvacuateFollowersClosure cl(_g1h, pss, _task_queues, &_terminator, objcopy_phase);
     cl.do_void(thread_start, worker_id);
 
     assert(pss->queue_is_empty(), "should be empty");
@@ -645,8 +643,7 @@ public:
     _task_queues(task_queues),
     _terminator(num_workers, _task_queues),
     _num_workers(num_workers),
-    _thread_start(0),
-    _thread_end(0)
+    thread_start(0)
   { }
 
   void work(uint worker_id) {
@@ -663,7 +660,6 @@ public:
 
       scan_roots(pss, worker_id);
       evacuate_live_objects(pss, worker_id);
-      log_info(gc)("worker %u elapsed %lums", worker_id, (thread_end - thread_start)/1000000);
 
     }
 
