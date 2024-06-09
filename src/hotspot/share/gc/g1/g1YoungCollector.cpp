@@ -59,6 +59,8 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/threads.hpp"
 #include "utilities/ticks.hpp"
+#include "../cpu/x86/rdtsc_x86.hpp"
+
 
 // GCTraceTime wrapper that constructs the message according to GC pause type and
 // GC cause.
@@ -553,10 +555,29 @@ public:
       _g1h(g1h), _par_scan_state(par_scan_state),
       _queues(queues), _terminator(terminator), _phase(phase) {}
 
+
   void do_void() {
     EventGCPhaseParallel event;
     G1ParScanThreadState* const pss = par_scan_state();
     pss->trim_queue();
+    jlong thread_end = Rdtsc::raw();
+    log_info(gc)("worker %u elapsed %lums", _worker_id, (thread_end - _thread_start)/1000000);
+
+    event.commit(GCId::current(), pss->worker_id(), G1GCPhaseTimes::phase_name(_phase));
+    do {
+      EventGCPhaseParallel event;
+      pss->steal_and_trim_queue(queues());
+      event.commit(GCId::current(), pss->worker_id(), G1GCPhaseTimes::phase_name(_phase));
+    } while (!offer_termination());
+  }
+
+  void do_void(jlong thread_start, uint worker_id) {
+    EventGCPhaseParallel event;
+    G1ParScanThreadState* const pss = par_scan_state();
+    pss->trim_queue();
+    jlong thread_end = Rdtsc::raw();
+    log_info(gc)("worker %u elapsed %lums", worker_id, (thread_end - thread_start)/1000000);
+
     event.commit(GCId::current(), pss->worker_id(), G1GCPhaseTimes::phase_name(_phase));
     do {
       EventGCPhaseParallel event;
@@ -576,6 +597,7 @@ protected:
   G1ScannerTasksQueueSet* _task_queues;
   TaskTerminator _terminator;
   uint _num_workers;
+  jlong thread_start;
 
   void evacuate_live_objects(G1ParScanThreadState* pss,
                              uint worker_id,
@@ -584,8 +606,8 @@ protected:
     G1GCPhaseTimes* p = _g1h->phase_times();
 
     Ticks start = Ticks::now();
-    G1ParEvacuateFollowersClosure cl(_g1h, pss, _task_queues, &_terminator, objcopy_phase);
-    cl.do_void();
+    G1ParEvacuateFollowersClosure cl(_g1h, pss, _task_queues, &_terminator, objcopy_phase, thread_start, worker_id);
+    cl.do_void(thread_start, worker_id);
 
     assert(pss->queue_is_empty(), "should be empty");
 
@@ -622,20 +644,27 @@ public:
     _per_thread_states(per_thread_states),
     _task_queues(task_queues),
     _terminator(num_workers, _task_queues),
-    _num_workers(num_workers)
+    _num_workers(num_workers),
+    _thread_start(0),
+    _thread_end(0)
   { }
 
   void work(uint worker_id) {
     start_work(worker_id);
+    
 
     {
       ResourceMark rm;
+
+      thread_start = Rdtsc::raw();
 
       G1ParScanThreadState* pss = _per_thread_states->state_for_worker(worker_id);
       pss->set_ref_discoverer(_g1h->ref_processor_stw());
 
       scan_roots(pss, worker_id);
       evacuate_live_objects(pss, worker_id);
+      log_info(gc)("worker %u elapsed %lums", worker_id, (thread_end - thread_start)/1000000);
+
     }
 
     end_work(worker_id);
