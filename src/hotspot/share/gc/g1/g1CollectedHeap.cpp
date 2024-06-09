@@ -671,15 +671,17 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   assert(is_humongous(word_size), "attempt_allocation_humongous() "
          "should only be called for humongous allocations");
 
+  log_info(gc)("g1 humongous obj %lu", word_size);
+
   // Humongous objects can exhaust the heap quickly, so we should check if we
   // need to start a marking cycle at each humongous object allocation. We do
   // the check before we do the actual allocation. The reason for doing it
   // before the allocation is that we avoid having to keep track of the newly
   // allocated memory while we do a GC.
-  if (policy()->need_to_start_conc_mark("concurrent humongous allocation",
-                                        word_size)) {
-    collect(GCCause::_g1_humongous_allocation);
-  }
+  // if (policy()->need_to_start_conc_mark("concurrent humongous allocation",
+  //                                       word_size)) {
+  //   collect(GCCause::_g1_humongous_allocation);
+  // }
 
   // We will loop until a) we manage to successfully perform the
   // allocation or b) we successfully schedule a collection which
