@@ -149,14 +149,13 @@ class ParallelScavengeHeap : public CollectedHeap {
     }
   }
 
-  // static volatile jlong* get_cards_dirty(){
-  //   return cards_dirty;
-  // }
-
   static void print_cards_dirty(){
+    jlong total = 0;
     for(uint i = 0; i < ParallelGCThreads; i++){
       log_info(gc)("card dirty %u: %lu ", i, cards_dirty[i]);
+      total += cards_dirty[i];
     }
+    log_info("card dirty total: %lu", total);
   }
 
   SoftRefPolicy* soft_ref_policy() override { return &_soft_ref_policy; }

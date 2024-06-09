@@ -571,6 +571,7 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
 
     CardValue* const _start_card;
     CardValue* const _end_card;
+    uint _worker_id;
 
     static const size_t ExpandedToScanMask = G1CardTable::WordAlreadyScanned;
     static const size_t ToScanMask = G1CardTable::g1_card_already_scanned;
@@ -636,19 +637,21 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
     }
 
   public:
-    ChunkScanner(CardValue* const start_card, CardValue* const end_card) :
+    ChunkScanner(CardValue* const start_card, CardValue* const end_card, uint worker_id) :
       _start_card(start_card),
       _end_card(end_card) {
         assert(is_word_aligned(start_card), "precondition");
         assert(is_word_aligned(end_card), "precondition");
       }
 
+      _worker_id = worker_id;
+
     template<typename Func>
     void on_dirty_cards(Func&& f) {
       for (CardValue* cur_card = _start_card; cur_card < _end_card; /* empty */) {
         CardValue* dirty_l = find_first_dirty_card(cur_card);
         CardValue* dirty_r = find_first_non_dirty_card(dirty_l);
-        G1CollectedHeap::atomic_add_cards_dirty(dirty_r - dirty_l);
+        G1CollectedHeap::atomic_add_cards_dirty(dirty_r - dirty_l, _worker_id);
 
         assert(dirty_l <= dirty_r, "inv");
 
@@ -685,7 +688,7 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
       CardValue* const start_card = _ct->byte_for_index(region_card_base_idx);
       CardValue* const end_card = start_card + claim.size();
 
-      ChunkScanner chunk_scanner{start_card, end_card};
+      ChunkScanner chunk_scanner{start_card, end_card, _worker_id};
       chunk_scanner.on_dirty_cards([&] (CardValue* dirty_l, CardValue* dirty_r) {
                                      do_claimed_block(region_idx, dirty_l, dirty_r);
                                    });

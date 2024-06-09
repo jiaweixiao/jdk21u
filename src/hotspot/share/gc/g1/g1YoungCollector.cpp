@@ -1064,8 +1064,7 @@ void G1YoungCollector::collect() {
     // modifies it to the next state.
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
 
-    jlong cards_dirty = G1CollectedHeap::get_cards_dirty();
-    log_info(gc)("cards dirty scanned: %lu", cards_dirty);
+    G1CollectedHeap::print_cards_dirty();
 
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
   }

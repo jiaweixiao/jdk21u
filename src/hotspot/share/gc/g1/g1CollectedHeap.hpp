@@ -264,18 +264,29 @@ public:
   void set_collection_set_candidates_stats(G1MonotonicArenaMemoryStats& stats);
   void set_young_gen_card_set_stats(const G1MonotonicArenaMemoryStats& stats);
 
-  static volatile jlong cards_dirty; 
+  static volatile jlong* cards_dirty; 
 
-  static void atomic_add_cards_dirty(volatile jlong rhs){
-    Atomic::add<jlong, jlong>(&cards_dirty, rhs);
+  static void initialize_cards_dirty(){
+    cards_dirty = NEW_C_HEAP_ARRAY(volatile jlong, ParallelGCThreads, mtGC);
+  }
+
+  static void atomic_add_cards_dirty(volatile jlong rhs, int worker_id){
+    Atomic::add<jlong, jlong>(&cards_dirty[worker_id], rhs);
   }
 
   static void clear_cards_dirty(){
-    cards_dirty = 0;
+    for(uint i = 0; i < ParallelGCThreads; i++){
+      cards_dirty[i] = 0;
+    }
   }
 
-  static jlong get_cards_dirty(){
-    return cards_dirty;
+  static void print_cards_dirty(){
+    jlong total = 0;
+    for(uint i = 0; i < ParallelGCThreads; i++){
+      log_info(gc)("card dirty %u: %lu ", i, cards_dirty[i]);
+      total += cards_dirty[i];
+    }
+    log_info("card dirty total: %lu", total);
   }
 
 private:
