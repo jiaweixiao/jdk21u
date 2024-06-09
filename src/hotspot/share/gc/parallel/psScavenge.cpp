@@ -510,8 +510,7 @@ bool PSScavenge::invoke_no_policy() {
       ParallelScavengeHeap::heap()->workers().run_task(&task);
 
 
-      jlong cards_dirty = ParallelScavengeHeap::get_cards_dirty();
-      log_info(gc)("cards dirty scanned: %lu", cards_dirty);
+      ParallelScavengeHeap::print_cards_dirty();
     }
 
     // Process reference objects discovered during scavenge

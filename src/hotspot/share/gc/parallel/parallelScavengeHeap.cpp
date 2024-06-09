@@ -86,6 +86,8 @@ jint ParallelScavengeHeap::initialize() {
   // Set up WorkerThreads
   _workers.initialize_workers();
 
+  initialize_cards_dirty();
+
   // Create and initialize the generations.
   _young_gen = new PSYoungGen(
       young_rs,
