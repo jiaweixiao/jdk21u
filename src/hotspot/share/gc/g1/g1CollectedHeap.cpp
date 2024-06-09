@@ -118,7 +118,7 @@
 
 size_t G1CollectedHeap::_humongous_object_threshold_in_words = 0;
 
-volatile jlong G1CollectedHeap::cards_dirty = 0;
+volatile jlong* G1CollectedHeap::cards_dirty = nullptr;
 
 // INVARIANTS/NOTES
 //
@@ -1472,6 +1472,8 @@ jint G1CollectedHeap::initialize() {
     return JNI_ENOMEM;
   }
   _workers->initialize_workers();
+
+  initialize_cards_dirty();
 
   _numa->set_region_info(HeapRegion::GrainBytes, page_size);
 

@@ -52,6 +52,7 @@
 #include "gc/shared/gcHeapSummary.hpp"
 #include "gc/shared/plab.hpp"
 #include "gc/shared/softRefPolicy.hpp"
+#include "gc/shared/gc_globals.hpp"
 #include "gc/shared/taskqueue.hpp"
 #include "memory/allocation.hpp"
 #include "memory/iterator.hpp"
@@ -286,7 +287,7 @@ public:
       log_info(gc)("card dirty %u: %lu ", i, cards_dirty[i]);
       total += cards_dirty[i];
     }
-    log_info("card dirty total: %lu", total);
+    log_info(gc)("card dirty total: %lu", total);
   }
 
 private:

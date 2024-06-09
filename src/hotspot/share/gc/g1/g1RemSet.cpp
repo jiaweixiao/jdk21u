@@ -639,12 +639,11 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
   public:
     ChunkScanner(CardValue* const start_card, CardValue* const end_card, uint worker_id) :
       _start_card(start_card),
-      _end_card(end_card) {
+      _end_card(end_card),
+      _worker_id(worker_id) {
         assert(is_word_aligned(start_card), "precondition");
         assert(is_word_aligned(end_card), "precondition");
       }
-
-      _worker_id = worker_id;
 
     template<typename Func>
     void on_dirty_cards(Func&& f) {

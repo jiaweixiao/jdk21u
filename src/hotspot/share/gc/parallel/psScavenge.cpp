@@ -70,6 +70,7 @@
 #include "runtime/vmOperations.hpp"
 #include "services/memoryService.hpp"
 #include "utilities/stack.inline.hpp"
+#include "../cpu/x86/rdtsc_x86.hpp"
 
 SpanSubjectToDiscoveryClosure PSScavenge::_span_based_discoverer;
 ReferenceProcessor*           PSScavenge::_ref_processor = nullptr;
@@ -307,6 +308,8 @@ public:
     assert(worker_id < _active_workers, "Sanity");
     ResourceMark rm;
 
+    jlong thread_start = Rdtsc::raw();
+
     if (!_is_old_gen_empty) {
       // There are only old-to-young pointers if there are objects
       // in the old gen.
@@ -341,6 +344,10 @@ public:
       // Do the real work
       pm->drain_stacks(false);
     }
+
+    jlong thread_end = Rdtsc::raw();
+
+    log_info(gc)("worker %u elapsed %lums", worker_id, (thread_end - thread_start)/1000000);
 
     // If active_workers can exceed 1, add a steal_work().
     // PSPromotionManager::drain_stacks_depth() does not fully drain its
