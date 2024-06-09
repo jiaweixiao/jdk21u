@@ -144,7 +144,7 @@ class ParallelScavengeHeap : public CollectedHeap {
   }
 
   static void clear_cards_dirty(){
-    for(int i = 0; i < ParallelGCThreads; i++){
+    for(uint i = 0; i < ParallelGCThreads; i++){
       cards_dirty[i] = 0;
     }
   }
@@ -154,8 +154,8 @@ class ParallelScavengeHeap : public CollectedHeap {
   // }
 
   static void print_cards_dirty(){
-    for(int i = 0; i < ParallelGCThreads; i++){
-      log_info(gc)("card dirty: %lu", cards_dirty[i]);
+    for(uint i = 0; i < ParallelGCThreads; i++){
+      log_info(gc)("card dirty %u: %lu ", i, cards_dirty[i]);
     }
   }
 
