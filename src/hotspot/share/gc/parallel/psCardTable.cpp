@@ -295,6 +295,7 @@ void PSCardTable::scavenge_contents_parallel(ObjectStartArray* start_array,
       dirty_l = find_first_dirty_card(cur_card, iter_limit_r);
       dirty_r = find_first_clean_card(start_array, dirty_l, iter_limit_r);
       assert(dirty_l <= dirty_r, "inv");
+      ParallelScavengeHeap::atomic_add_cards_dirty(dirty_r - dirty_l);
 
       // empty
       if (dirty_l == dirty_r) {

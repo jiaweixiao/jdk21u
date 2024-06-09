@@ -118,6 +118,8 @@
 
 size_t G1CollectedHeap::_humongous_object_threshold_in_words = 0;
 
+volatile jlong G1CollectedHeap::cards_dirty = 0;
+
 // INVARIANTS/NOTES
 //
 // All allocation activity covered by the G1CollectedHeap interface is

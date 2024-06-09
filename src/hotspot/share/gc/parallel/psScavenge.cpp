@@ -503,10 +503,15 @@ bool PSScavenge::invoke_no_policy() {
     {
       // GCTraceTime(Debug, gc, phases) tm("Scavenge", &_gc_timer);
       GCTraceTime(Info, gc) tm("Scavenge", &_gc_timer);
+      ParallelScavengeHeap::clear_cards_dirty();
 
 
       ScavengeRootsTask task(old_gen, active_workers);
       ParallelScavengeHeap::heap()->workers().run_task(&task);
+
+
+      jlong cards_dirty = ParallelScavengeHeap::get_cards_dirty();
+      log_info(gc)("cards dirty scanned: %lu", cards_dirty);
     }
 
     // Process reference objects discovered during scavenge

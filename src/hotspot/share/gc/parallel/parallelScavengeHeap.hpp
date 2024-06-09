@@ -133,6 +133,20 @@ class ParallelScavengeHeap : public CollectedHeap {
     return "Parallel";
   }
 
+  static volatile jlong cards_dirty; 
+
+  static void atomic_add_cards_dirty(volatile jlong rhs){
+    Atomic::add<jlong, jlong>(&cards_dirty, rhs);
+  }
+
+  static void clear_cards_dirty(){
+    cards_dirty = 0;
+  }
+
+  static jlong get_cards_dirty(){
+    return cards_dirty;
+  }
+
   SoftRefPolicy* soft_ref_policy() override { return &_soft_ref_policy; }
 
   GrowableArray<GCMemoryManager*> memory_managers() override;

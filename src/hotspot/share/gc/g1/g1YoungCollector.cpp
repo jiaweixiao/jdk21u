@@ -1038,6 +1038,7 @@ void G1YoungCollector::collect() {
     // policy for the collection deliberately elides verification (and some
     // other trivial setup above).
     policy()->record_young_collection_start();
+    G1CollectedHeap::clear_cards_dirty();
 
     pre_evacuate_collection_set(jtm.evacuation_info());
 
@@ -1062,6 +1063,9 @@ void G1YoungCollector::collect() {
     // Need to report the collection pause now since record_collection_pause_end()
     // modifies it to the next state.
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
+
+    jlong cards_dirty = G1CollectedHeap::get_cards_dirty();
+    log_info(gc)("cards dirty scanned: %lu", cards_dirty);
 
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
   }

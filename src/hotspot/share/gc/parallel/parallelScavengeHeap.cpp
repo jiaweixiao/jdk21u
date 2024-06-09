@@ -61,6 +61,8 @@ PSOldGen*    ParallelScavengeHeap::_old_gen = nullptr;
 PSAdaptiveSizePolicy* ParallelScavengeHeap::_size_policy = nullptr;
 PSGCAdaptivePolicyCounters* ParallelScavengeHeap::_gc_policy_counters = nullptr;
 
+volatile jlong ParallelScavengeHeap::cards_dirty = 0;
+
 jint ParallelScavengeHeap::initialize() {
   const size_t reserved_heap_size = ParallelArguments::heap_reserved_size_bytes();
 

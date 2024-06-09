@@ -376,6 +376,7 @@ public:
 
   void iterate_dirty_regions_from(HeapRegionClosure* cl, uint worker_id) {
     uint num_regions = _next_dirty_regions->size();
+    // G1CollectedHeap::atomic_add_cards_dirty(num_regions);
 
     if (num_regions == 0) {
       return;
@@ -647,6 +648,7 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
       for (CardValue* cur_card = _start_card; cur_card < _end_card; /* empty */) {
         CardValue* dirty_l = find_first_dirty_card(cur_card);
         CardValue* dirty_r = find_first_non_dirty_card(dirty_l);
+        G1CollectedHeap::atomic_add_cards_dirty(dirty_r - dirty_l);
 
         assert(dirty_l <= dirty_r, "inv");
 

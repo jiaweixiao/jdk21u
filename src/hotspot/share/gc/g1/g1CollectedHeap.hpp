@@ -264,6 +264,20 @@ public:
   void set_collection_set_candidates_stats(G1MonotonicArenaMemoryStats& stats);
   void set_young_gen_card_set_stats(const G1MonotonicArenaMemoryStats& stats);
 
+  static volatile jlong cards_dirty; 
+
+  static void atomic_add_cards_dirty(volatile jlong rhs){
+    Atomic::add<jlong, jlong>(&cards_dirty, rhs);
+  }
+
+  static void clear_cards_dirty(){
+    cards_dirty = 0;
+  }
+
+  static jlong get_cards_dirty(){
+    return cards_dirty;
+  }
+
 private:
 
   G1HRPrinter _hr_printer;
