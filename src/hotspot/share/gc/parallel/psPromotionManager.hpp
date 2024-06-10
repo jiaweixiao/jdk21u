@@ -94,8 +94,6 @@ class PSPromotionManager {
   StringDedup::Requests _string_dedup_requests;
 
 
-  size_t                                _tasks_pushed;
-  size_t                                _refs_scanned;
 
   // Accessors
   static PSOldGen* old_gen()         { return _old_gen; }
@@ -119,6 +117,10 @@ class PSPromotionManager {
   oop copy_unmarked_to_survivor_space(oop o, markWord m);
 
  public:
+  size_t                                _tasks_pushed;
+  size_t                                _refs_scanned;
+
+
   // Static
   static void initialize();
 
@@ -162,8 +164,8 @@ class PSPromotionManager {
     _tasks_pushed = 0;
   }
 
-  void print_scan_stats(){
-    log_info(gc)("refs_scanned %lu, tasks_pushed", _refs_scanned, _tasks_pushed);
+  void print_scan_stats(uint worker_id){
+    log_info(gc)("worker %u: refs_scanned %lu, tasks_pushed %lu", worker_id, _refs_scanned, _tasks_pushed);
   }
 
  public:

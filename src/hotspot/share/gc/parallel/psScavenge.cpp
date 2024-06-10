@@ -327,7 +327,7 @@ public:
 
         // Do the real work
         pm->drain_stacks(false);
-        pm->print_scan_stats();
+        pm->print_scan_stats(worker_id);
       }
     }
 

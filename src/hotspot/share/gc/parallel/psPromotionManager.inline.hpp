@@ -97,7 +97,7 @@ class PSPushContentsClosure: public BasicOopIterateClosure {
   PSPushContentsClosure(PSPromotionManager* pm) : BasicOopIterateClosure(PSScavenge::reference_processor()), _pm(pm) {}
 
   template <typename T> void do_oop_nv(T* p) {
-    _refs_scanned += 1;
+    _pm->_refs_scanned += 1;
     if (PSScavenge::should_scavenge(p)) {
       _pm->claim_or_forward_depth(p);
     }
