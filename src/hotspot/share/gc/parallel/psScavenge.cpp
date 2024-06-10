@@ -316,6 +316,7 @@ public:
       {
         PSPromotionManager* pm = PSPromotionManager::gc_thread_promotion_manager(worker_id);
         PSCardTable* card_table = ParallelScavengeHeap::heap()->card_table();
+        pm->reset_scan_stats();
 
         card_table->scavenge_contents_parallel(_old_gen->start_array(),
                                                _old_gen->object_space(),
@@ -326,6 +327,7 @@ public:
 
         // Do the real work
         pm->drain_stacks(false);
+        pm->print_scan_stats();
       }
     }
 

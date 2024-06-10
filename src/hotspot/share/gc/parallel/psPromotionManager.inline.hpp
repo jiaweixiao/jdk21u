@@ -51,6 +51,7 @@ inline PSPromotionManager* PSPromotionManager::manager_array(uint index) {
 }
 
 inline void PSPromotionManager::push_depth(ScannerTask task) {
+  _tasks_pushed += 1;
   claimed_stack_depth()->push(task);
 }
 
@@ -96,6 +97,7 @@ class PSPushContentsClosure: public BasicOopIterateClosure {
   PSPushContentsClosure(PSPromotionManager* pm) : BasicOopIterateClosure(PSScavenge::reference_processor()), _pm(pm) {}
 
   template <typename T> void do_oop_nv(T* p) {
+    _refs_scanned += 1;
     if (PSScavenge::should_scavenge(p)) {
       _pm->claim_or_forward_depth(p);
     }

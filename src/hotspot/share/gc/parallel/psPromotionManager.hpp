@@ -93,6 +93,10 @@ class PSPromotionManager {
 
   StringDedup::Requests _string_dedup_requests;
 
+
+  size_t                                _tasks_pushed;
+  size_t                                _refs_scanned;
+
   // Accessors
   static PSOldGen* old_gen()         { return _old_gen; }
   static MutableSpace* young_space() { return _young_space; }
@@ -152,6 +156,16 @@ class PSPromotionManager {
   void drain_stacks(bool totally_drain) {
     drain_stacks_depth(totally_drain);
   }
+
+  void reset_scan_stats(){
+    _refs_scanned = 0;
+    _tasks_pushed = 0;
+  }
+
+  void print_scan_stats(){
+    log_info(gc)("refs_scanned %lu, tasks_pushed", _refs_scanned, _tasks_pushed);
+  }
+
  public:
   void drain_stacks_cond_depth() {
     if (claimed_stack_depth()->size() > _target_stack_size) {
