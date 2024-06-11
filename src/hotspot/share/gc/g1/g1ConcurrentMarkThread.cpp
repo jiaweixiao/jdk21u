@@ -122,6 +122,7 @@ void G1ConcurrentMarkThread::run_service() {
     FormatBuffer<128> title("Concurrent %s Cycle", _state == FullMark ? "Mark" : "Undo");
     GCTraceConcTime(Info, gc) tt(title);
 
+    os::dump_thread_majflt_and_cputime("beforeConcCycle-");
     concurrent_cycle_start();
 
     if (_state == FullMark) {
@@ -132,6 +133,7 @@ void G1ConcurrentMarkThread::run_service() {
     }
 
     concurrent_cycle_end(_state == FullMark && !_cm->has_aborted());
+    os::dump_thread_majflt_and_cputime("afterConcCycle-");
 
     _vtime_accum = (os::elapsedVTime() - _vtime_start);
   }
