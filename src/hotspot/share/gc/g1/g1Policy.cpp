@@ -1193,7 +1193,7 @@ void G1Policy::decide_on_concurrent_start_pause() {
 
   // We should not be starting a concurrent start pause if the concurrent mark
   // thread is terminating.
-  return;
+  // return;
   if (_g1h->concurrent_mark_is_terminating()) {
     return;
   }
