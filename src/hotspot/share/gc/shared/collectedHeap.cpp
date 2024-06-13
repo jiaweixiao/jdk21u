@@ -412,7 +412,6 @@ size_t CollectedHeap::max_tlab_size() const {
   size_t max_int_size = typeArrayOopDesc::header_size(T_INT) +
               sizeof(jint) *
               ((juint) max_jint / (size_t) HeapWordSize);
-  max_int_size = MIN2(max_int_size, (1024UL * 1024 * 8)/ (size_t) HeapWordSize);
   return align_down(max_int_size, MinObjAlignment);
 }
 

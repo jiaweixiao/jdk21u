@@ -671,8 +671,6 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   assert(is_humongous(word_size), "attempt_allocation_humongous() "
          "should only be called for humongous allocations");
 
-  // log_info(gc)("g1 humongous obj %lu", word_size);
-
   // Humongous objects can exhaust the heap quickly, so we should check if we
   // need to start a marking cycle at each humongous object allocation. We do
   // the check before we do the actual allocation. The reason for doing it
