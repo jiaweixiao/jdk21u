@@ -520,8 +520,14 @@ bool ZGenerationYoung::should_record_stats() {
 void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
   ZGenerationCollectionScopeYoung scope(type, timer);
 
+  // [gc breakdown]
+  os::dump_accum_thread_majflt_and_cputime("beforeConcCycle");
+  GCMajfltStats gc_majflt_stats;
+
   // Phase 1: Pause Mark Start
+  gc_majflt_stats.start();
   pause_mark_start();
+  gc_majflt_stats.end_and_log("pause mark start");
 
   // Phase 2: Concurrent Mark
   concurrent_mark();
@@ -529,11 +535,15 @@ void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
   abortpoint();
 
   // Phase 3: Pause Mark End
+  gc_majflt_stats.start();
   while (!pause_mark_end()) {
+    gc_majflt_stats.end_and_log("pause mark end");
+
     // Phase 3.5: Concurrent Mark Continue
     concurrent_mark_continue();
 
     abortpoint();
+    gc_majflt_stats.start();
   }
 
   // Phase 4: Concurrent Mark Free
@@ -552,7 +562,9 @@ void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
   abortpoint();
 
   // Phase 7: Pause Relocate Start
+  gc_majflt_stats.start();
   pause_relocate_start();
+  gc_majflt_stats.end_and_log("pause relocate start");
 
   // Note that we can't have an abortpoint here. We need
   // to let concurrent_relocate() call abort_page()
@@ -560,6 +572,8 @@ void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
 
   // Phase 8: Concurrent Relocate
   concurrent_relocate();
+
+  os::dump_accum_thread_majflt_and_cputime("afterConcCycle");
 }
 
 class VM_ZMarkStartYoungAndOld : public VM_ZOperation {
@@ -994,17 +1008,24 @@ bool ZGenerationOld::should_record_stats() {
 void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   ZGenerationCollectionScopeOld scope(timer);
 
+  // [gc breakdown]
+  os::dump_accum_thread_majflt_and_cputime("beforeConcCycle");
+  GCMajfltStats gc_majflt_stats;
+
   // Phase 1: Concurrent Mark
   concurrent_mark();
 
   abortpoint();
 
   // Phase 2: Pause Mark End
+  gc_majflt_stats.start();
   while (!pause_mark_end()) {
+    gc_majflt_stats.end_and_log("pause mark end");
     // Phase 2.5: Concurrent Mark Continue
     concurrent_mark_continue();
 
     abortpoint();
+    gc_majflt_stats.start();
   }
 
   // Phase 3: Concurrent Mark Free
@@ -1023,7 +1044,9 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   abortpoint();
 
   // Phase 6: Pause Verify
+  gc_majflt_stats.start();
   pause_verify();
+  gc_majflt_stats.end_and_log("pause verify");
 
   // Phase 7: Concurrent Select Relocation Set
   concurrent_select_relocation_set();
@@ -1039,7 +1062,9 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
     abortpoint();
 
     // Phase 9: Pause Relocate Start
+    gc_majflt_stats.start();
     pause_relocate_start();
+    gc_majflt_stats.end_and_log("pause relocate start");
   }
 
   // Note that we can't have an abortpoint here. We need
@@ -1048,6 +1073,8 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
 
   // Phase 10: Concurrent Relocate
   concurrent_relocate();
+
+  os::dump_accum_thread_majflt_and_cputime("afterConcCycle");
 }
 
 void ZGenerationOld::flip_mark_start() {
