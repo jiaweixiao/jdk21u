@@ -393,7 +393,10 @@ void ShenandoahControlThread::service_concurrent_normal_cycle(GCCause::Cause cau
   TraceCollectorStats tcs(heap->monitoring_support()->concurrent_collection_counters());
 
   ShenandoahConcurrentGC gc;
-  if (gc.collect(cause)) {
+  os::dump_thread_majflt_and_cputime("beforeConcCycle-");
+  bool res = gc.collect(cause);
+  os::dump_thread_majflt_and_cputime("afterConcCycle-");
+  if (res) {
     // Cycle is complete
     heap->heuristics()->record_success_concurrent();
     heap->shenandoah_policy()->record_success_concurrent();
