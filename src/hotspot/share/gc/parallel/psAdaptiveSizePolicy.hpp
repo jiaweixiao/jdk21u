@@ -112,6 +112,25 @@ class PSAdaptiveSizePolicy : public AdaptiveSizePolicy {
   // with increasing collections.
   uint _young_gen_size_increment_supplement;
   uint _old_gen_size_increment_supplement;
+ public:
+  // shengkai: distinguish mutator/minor gc/major gc period accurately
+  // update when init policy, after minor gc, after full gc, minor gc begin
+  // beginning of mutator time/gc time
+  double _pre_user_time;   // mutator user time this epoch
+  double _pre_sys_time;    // system time this epoch
+  double _pre_real_time;   // real time this epoch
+
+  // mutator time result this epoch
+  double _mut_user_time;   // mutator user time this epoch
+  double _mut_sys_time;    // system time this epoch
+  double _mut_real_time;   // real time this epoch
+
+  // gc time result this epoch
+  double _gc_user_time;   // minor gc user time this epoch
+  double _gc_sys_time;    // minor system time this epoch
+  double _gc_real_time;   // minor real time this epoch
+
+  bool   _is_full;        // flag igonre full gc perfomance
 
  private:
 
@@ -185,6 +204,12 @@ class PSAdaptiveSizePolicy : public AdaptiveSizePolicy {
   virtual GCPolicyKind kind() const { return _gc_ps_adaptive_size_policy; }
 
  public:
+  // shengkai: update time record
+  // update beginning
+  void update_before_stage();
+  void calculate_mutator();
+  void calculate_minor_gc();
+
   virtual size_t eden_increment(size_t cur_eden);
   virtual size_t promo_increment(size_t cur_promo);
 

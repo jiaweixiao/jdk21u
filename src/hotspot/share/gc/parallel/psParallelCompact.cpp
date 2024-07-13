@@ -1930,6 +1930,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
   _gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
 
+  //shengkai: ignore major gc by update time record
+  size_policy->update_before_stage();
+  log_info(gc, ergo)("[DEBUG] ignoring full gc! User=%lfs, Sys=%lfs, Real=%lfs",\
+                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
   
   unsigned long _end_majflt = os::accumMajflt();
   log_info(gc)("Majflt(full)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);

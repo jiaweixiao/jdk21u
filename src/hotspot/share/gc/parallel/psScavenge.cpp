@@ -385,6 +385,11 @@ bool PSScavenge::invoke_no_policy() {
   PSOldGen* old_gen = heap->old_gen();
   PSAdaptiveSizePolicy* size_policy = heap->size_policy();
 
+  //shengkai: caculate mutator here
+  size_policy->calculate_mutator();
+  log_info(gc, ergo)("[DEBUG] mutator time! User=%lfs, Sys=%lfs, Real=%lfs",size_policy->_mut_user_time,size_policy->_mut_sys_time,size_policy->_mut_real_time);
+  size_policy->update_before_stage();
+
   heap->increment_total_collections();
 
   if (AdaptiveSizePolicy::should_update_eden_stats(gc_cause)) {
@@ -502,6 +507,10 @@ bool PSScavenge::invoke_no_policy() {
     // failure cleanup time as part of the collection (otherwise, we're
     // implicitly saying it's mutator time).
     size_policy->minor_collection_end(gc_cause);
+    //shengkai: calculate gc time here
+    size_policy->calculate_minor_gc();
+    log_info(gc, ergo)("[DEBUG] minor gc time! User=%lfs, Sys=%lfs, Real=%lfs",\
+                      size_policy->_gc_user_time,size_policy->_gc_sys_time,size_policy->_gc_real_time);
 
     if (!promotion_failure_occurred) {
       // Swap the survivor spaces.
@@ -672,6 +681,11 @@ bool PSScavenge::invoke_no_policy() {
   _gc_timer.register_gc_end();
 
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
+  
+  //shengkai: record mutator begin
+  size_policy->update_before_stage();
+  log_info(gc, ergo)("[DEBUG] finish minor gc! User=%lfs, Sys=%lfs, Real=%lfs",\
+                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
 
   unsigned long _end_majflt = os::accumMajflt();
   log_info(gc)("Majflt(young)=%ld (%ld -> %ld)", _end_majflt - _start_majflt , _start_majflt, _end_majflt);
