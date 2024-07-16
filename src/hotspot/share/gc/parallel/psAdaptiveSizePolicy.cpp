@@ -68,6 +68,9 @@ PSAdaptiveSizePolicy::PSAdaptiveSizePolicy(size_t init_eden_size,
   _major_timer.start();
   //shengkai: may not so accurate in first epoch
   update_before_stage();
+  _prev_mut_rate = 0;
+  _prev_eden = 0;
+  _is_backed = false;
   log_info(gc, ergo)("[DEBUG] init pre time with policy initialization! User=%lfs, Sys=%lfs, Real=%lfs",_pre_user_time,_pre_sys_time,_pre_real_time);
 }
 
@@ -279,21 +282,42 @@ void PSAdaptiveSizePolicy::compute_eden_space_size(
 
 
   // shengkai: eden space step and prev adaptive information
-  double rate = (_mut_sys_time+_gc_sys_time)/_gc_user_time;
-  if(rate > 1/* super param */){
+  double gc_rate = _gc_user_time / _mut_user_time;
+  double sys_rate = 0.0;
+  if(gc_rate < 1){
+    sys_rate = (_mut_sys_time+_gc_sys_time)/(_mut_user_time+_gc_user_time);
+  }else{
+    //ignore app interference when young gen is small enough
+    sys_rate = _gc_sys_time/_gc_user_time;
+  }
+
+  double mut_rate = _mut_user_time/(_mut_user_time+ _mut_sys_time+ _gc_user_time+ _gc_sys_time);
+  if((mut_rate < _prev_mut_rate) && (_is_backed == false)){//detect interferences of app pattern changes(should be short) , keep size until stable
+    _is_backed = true;
+    desired_eden_size = _prev_eden;
+    log_info(gc, ergo)("[DEBUG] back eden for %lf<0.9*%lf, new eden = %ld",mut_rate , _prev_mut_rate, desired_eden_size);
+  }else if(sys_rate > gc_rate/* super param */){
     // majflat block more, assume no more than 10 times block
+    _is_backed = false;
     double decre = 0.05*(_mut_sys_time+_gc_sys_time)/_mut_user_time;
     if(decre > 0.5 /* super param, max decre 40% at once*/)
       decre = 0.5;
     desired_eden_size = (size_t)((double)desired_eden_size * (1 - decre));
+    log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_size);
   }else{
     // gc cost more
-    double incre = 0.1 * _gc_user_time / _mut_user_time;
-    if( incre > 1/* super param, max double eden size at once*/)
+    _is_backed = false;
+    double incre = 0.1*gc_rate;
+    if( incre > 1/* super param, max triple eden size at once*/)
       incre = 1;
-    desired_eden_size = (size_t)((double)desired_eden_size * (1 + incre));
+    desired_eden_size += (size_t)((double)1024*1024*1024 * incre);
+    log_info(gc, ergo)("[DEBUG] incre eden for %lfg, new eden = %ld", incre, desired_eden_size);
   }
 
+  if(_is_backed == false){
+    _prev_eden = cur_eden;
+    _prev_mut_rate = mut_rate;
+  }
 
   // Which way should we go?
   // if pause requirement is not met

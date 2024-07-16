@@ -130,7 +130,9 @@ class PSAdaptiveSizePolicy : public AdaptiveSizePolicy {
   double _gc_sys_time;    // minor system time this epoch
   double _gc_real_time;   // minor real time this epoch
 
-  bool   _is_full;        // flag igonre full gc perfomance
+  size_t _prev_eden;      // step back
+  double _prev_mut_rate;  // step back flag
+  bool   _is_backed;	  // flag of mv back
 
  private:
 

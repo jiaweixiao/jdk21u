@@ -476,6 +476,9 @@ void PSYoungGen::resize_spaces(size_t requested_eden_size,
     // overflow (i.e., eden_start + requested_eden_size
     // may too large for representation in 32bits).
     size_t eden_size;
+    eden_size = MIN2(requested_eden_size,
+                       pointer_delta(from_start, eden_start, sizeof(char)));
+    /*
     if (maintain_minimum) {
       // Only make eden larger than the requested size if
       // the minimum size of the generation has to be maintained.
@@ -489,6 +492,7 @@ void PSYoungGen::resize_spaces(size_t requested_eden_size,
       eden_size = MIN2(requested_eden_size,
                        pointer_delta(from_start, eden_start, sizeof(char)));
     }
+    */
 
     eden_end = eden_start + eden_size;
     assert(eden_end >= eden_start, "addition overflowed");
@@ -559,12 +563,16 @@ void PSYoungGen::resize_spaces(size_t requested_eden_size,
     // Compute how big eden can be, then adjust end.
     // See  comments above on calculating eden_end.
     size_t eden_size;
+    eden_size = MIN2(requested_eden_size,
+		    pointer_delta(to_start, eden_start, sizeof(char)));
+    /*
     if (maintain_minimum) {
       eden_size = pointer_delta(to_start, eden_start, sizeof(char));
     } else {
       eden_size = MIN2(requested_eden_size,
                        pointer_delta(to_start, eden_start, sizeof(char)));
     }
+    */
     eden_end = eden_start + eden_size;
     assert(eden_end >= eden_start, "addition overflowed");
 
