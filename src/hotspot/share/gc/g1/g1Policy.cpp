@@ -120,7 +120,7 @@ void G1Policy::record_young_gc_pause_start() {
   phase_times()->record_gc_pause_start();
     //shengkai: caculate mutator here
   calculate_mutator();
-  log_info(gc, ergo)("[DEBUG] mutator time! User=%lfs, Sys=%lfs, Real=%lfs",size_policy->_mut_user_time,size_policy->_mut_sys_time,size_policy->_mut_real_time);
+  log_info(gc, ergo)("[DEBUG] mutator time! User=%lfs, Sys=%lfs, Real=%lfs",_mut_user_time,_mut_sys_time,_mut_real_time);
   update_before_stage();
 }
 
@@ -248,7 +248,7 @@ void G1Policy::update_young_length_bounds(size_t pending_cards, size_t rs_length
 // value smaller than what is already allocated or what can actually be allocated.
 // This return value is only an expectation.
 //
-uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_length) const {
+uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_length) {
   uint min_young_length_by_sizer = _young_gen_sizer.min_desired_young_length();
   uint max_young_length_by_sizer = _young_gen_sizer.max_desired_young_length();
 
@@ -280,6 +280,8 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
   uint desired_young_length = 0;
   if (use_adaptive_young_list_length()) {
     uint desired_eden_length = 0;
+    size_t cur_eden = _g1h->eden_regions_count() * G1HeapRegionSize;
+    size_t desired_eden_count = cur_eden;
     {
       // shengkai: eden space step and prev adaptive information
       double gc_rate = _gc_user_time / _mut_user_time;
@@ -294,24 +296,24 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
       double mut_rate = _mut_user_time/(_mut_user_time+ _mut_sys_time+ _gc_user_time+ _gc_sys_time);
       if((mut_rate < _prev_mut_rate) && (_is_backed == false)){//detect interferences of app pattern changes(should be short) , keep size until stable
         _is_backed = true;
-        desired_eden_length = _prev_eden;
-        log_info(gc, ergo)("[DEBUG] back eden for %lf<0.9*%lf, new eden = %ld",mut_rate , _prev_mut_rate, desired_eden_length);
+        desired_eden_count = _prev_eden;
+        log_info(gc, ergo)("[DEBUG] back eden for %lf<0.9*%lf, new eden = %ld",mut_rate , _prev_mut_rate, desired_eden_count);
       }else if(sys_rate > gc_rate/* super param */){
         // majflat block more, assume no more than 10 times block
         _is_backed = false;
         double decre = 0.05*(_mut_sys_time+_gc_sys_time)/_mut_user_time;
         if(decre > 0.5 /* super param, max decre 40% at once*/)
           decre = 0.5;
-        desired_eden_length = (size_t)((double)desired_eden_length * (1 - decre));
-        log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_length);
+        desired_eden_count = (size_t)((double)desired_eden_count * (1 - decre));
+        log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_count);
       }else{
         // gc cost more
         _is_backed = false;
         double incre = 0.1*gc_rate;
         if( incre > 1/* super param, max triple eden size at once*/)
           incre = 1;
-        desired_eden_length += (size_t)((double)1024*1024*1024 * incre);
-        log_info(gc, ergo)("[DEBUG] incre eden for %lfg, new eden = %ld", incre, desired_eden_length);
+        desired_eden_count += (size_t)((double)1024*1024*1024 * incre);
+        log_info(gc, ergo)("[DEBUG] incre eden for %lfg, new eden = %ld", incre, desired_eden_count);
       }
 
       if(_is_backed == false){
@@ -319,6 +321,7 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
         _prev_mut_rate = mut_rate;
       }
     }
+    desired_eden_length = desired_eden_count / G1HeapRegionSize;
     // desired_eden_length_by_mmu = calculate_desired_eden_length_by_mmu();
 
     // double base_time_ms = predict_base_time_ms(pending_cards, rs_length);
@@ -609,7 +612,7 @@ void G1Policy::record_full_collection_end() {
   //shengkai: ignore major gc by update time record
   update_before_stage();
   log_info(gc, ergo)("[DEBUG] ignoring full gc! User=%lfs, Sys=%lfs, Real=%lfs",\
-                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
+                    _pre_user_time, _pre_sys_time, _pre_real_time);
   
 
   // "Nuke" the heuristics that control the young/mixed GC
@@ -1058,13 +1061,13 @@ void G1Policy::record_young_gc_pause_end(bool evacuation_failed) {
   //shengkai: calculate gc time here
   calculate_minor_gc();
   log_info(gc, ergo)("[DEBUG] minor gc time! User=%lfs, Sys=%lfs, Real=%lfs",\
-                    size_policy->_gc_user_time,size_policy->_gc_sys_time,size_policy->_gc_real_time);
+                     _gc_user_time, _gc_sys_time, _gc_real_time);
 
 
   //shengkai: record mutator begin
-  size_policy->update_before_stage();
+  update_before_stage();
   log_info(gc, ergo)("[DEBUG] finish minor gc! User=%lfs, Sys=%lfs, Real=%lfs",\
-                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
+                     _pre_user_time, _pre_sys_time, _pre_real_time);
 
 
 }
