@@ -448,6 +448,35 @@ public:
   void print_age_table();
 
   void update_survivors_policy();
+
+
+public:
+  // shengkai: distinguish mutator/minor gc/major gc period accurately
+  // update when init policy, after minor gc, after full gc, minor gc begin
+  // beginning of mutator time/gc time
+  double _pre_user_time;   // mutator user time this epoch
+  double _pre_sys_time;    // system time this epoch
+  double _pre_real_time;   // real time this epoch
+
+  // mutator time result this epoch
+  double _mut_user_time;   // mutator user time this epoch
+  double _mut_sys_time;    // system time this epoch
+  double _mut_real_time;   // real time this epoch
+
+  // gc time result this epoch
+  double _gc_user_time;   // minor gc user time this epoch
+  double _gc_sys_time;    // minor system time this epoch
+  double _gc_real_time;   // minor real time this epoch
+
+  size_t _prev_eden;      // step back
+  double _prev_mut_rate;  // step back flag
+  bool   _is_backed;	  // flag of mv back
+
+  // shengkai: update time record
+  // update beginning
+  void update_before_stage();
+  void calculate_mutator();
+  void calculate_minor_gc();
 };
 
 #endif // SHARE_GC_G1_G1POLICY_HPP

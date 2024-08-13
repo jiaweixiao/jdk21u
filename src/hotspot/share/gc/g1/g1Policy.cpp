@@ -51,6 +51,8 @@
 #include "utilities/pair.hpp"
 
 #include "gc/shared/gcTraceTime.inline.hpp"
+//shengkai need syscall for user/sys time
+#include "runtime/os.hpp"
 
 G1Policy::G1Policy(STWGCTimer* gc_timer) :
   _predictor(G1ConfidencePercent / 100.0),
@@ -83,6 +85,12 @@ G1Policy::G1Policy(STWGCTimer* gc_timer) :
   _max_survivor_regions(0),
   _survivors_age_table(true)
 {
+  //shengkai: may not so accurate in first epoch
+  update_before_stage();
+  _prev_mut_rate = 0;
+  _prev_eden = 0;
+  _is_backed = false;
+  log_info(gc, ergo)("[DEBUG] init pre time with policy initialization! User=%lfs, Sys=%lfs, Real=%lfs",_pre_user_time,_pre_sys_time,_pre_real_time);
 }
 
 G1Policy::~G1Policy() {
@@ -110,6 +118,10 @@ void G1Policy::init(G1CollectedHeap* g1h, G1CollectionSet* collection_set) {
 
 void G1Policy::record_young_gc_pause_start() {
   phase_times()->record_gc_pause_start();
+    //shengkai: caculate mutator here
+  calculate_mutator();
+  log_info(gc, ergo)("[DEBUG] mutator time! User=%lfs, Sys=%lfs, Real=%lfs",size_policy->_mut_user_time,size_policy->_mut_sys_time,size_policy->_mut_real_time);
+  update_before_stage();
 }
 
 class G1YoungLengthPredictor {
@@ -177,6 +189,8 @@ void G1Policy::record_new_heap_size(uint new_number_of_regions) {
   _ihop_control->update_target_occupancy(new_number_of_regions * HeapRegion::GrainBytes);
 }
 
+// hua: if we do a longest collection later, how big eden we should save for allocation
+// to avoid using up eden before the collection is allowed 
 uint G1Policy::calculate_desired_eden_length_by_mmu() const {
   assert(use_adaptive_young_list_length(), "precondition");
   double now_sec = os::elapsedTime();
@@ -265,19 +279,59 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
 
   uint desired_young_length = 0;
   if (use_adaptive_young_list_length()) {
-    desired_eden_length_by_mmu = calculate_desired_eden_length_by_mmu();
+    uint desired_eden_length = 0;
+    {
+      // shengkai: eden space step and prev adaptive information
+      double gc_rate = _gc_user_time / _mut_user_time;
+      double sys_rate = 0.0;
+      if(gc_rate < 1){
+        sys_rate = (_mut_sys_time+_gc_sys_time)/(_mut_user_time+_gc_user_time);
+      }else{
+        //ignore app interference when young gen is small enough
+        sys_rate = _gc_sys_time/_gc_user_time;
+      }
 
-    double base_time_ms = predict_base_time_ms(pending_cards, rs_length);
+      double mut_rate = _mut_user_time/(_mut_user_time+ _mut_sys_time+ _gc_user_time+ _gc_sys_time);
+      if((mut_rate < _prev_mut_rate) && (_is_backed == false)){//detect interferences of app pattern changes(should be short) , keep size until stable
+        _is_backed = true;
+        desired_eden_length = _prev_eden;
+        log_info(gc, ergo)("[DEBUG] back eden for %lf<0.9*%lf, new eden = %ld",mut_rate , _prev_mut_rate, desired_eden_length);
+      }else if(sys_rate > gc_rate/* super param */){
+        // majflat block more, assume no more than 10 times block
+        _is_backed = false;
+        double decre = 0.05*(_mut_sys_time+_gc_sys_time)/_mut_user_time;
+        if(decre > 0.5 /* super param, max decre 40% at once*/)
+          decre = 0.5;
+        desired_eden_length = (size_t)((double)desired_eden_length * (1 - decre));
+        log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_length);
+      }else{
+        // gc cost more
+        _is_backed = false;
+        double incre = 0.1*gc_rate;
+        if( incre > 1/* super param, max triple eden size at once*/)
+          incre = 1;
+        desired_eden_length += (size_t)((double)1024*1024*1024 * incre);
+        log_info(gc, ergo)("[DEBUG] incre eden for %lfg, new eden = %ld", incre, desired_eden_length);
+      }
 
-    desired_eden_length_by_pause =
-      calculate_desired_eden_length_by_pause(base_time_ms,
-                                             absolute_min_young_length - survivor_length,
-                                             absolute_max_young_length - survivor_length);
+      if(_is_backed == false){
+        _prev_eden = cur_eden;
+        _prev_mut_rate = mut_rate;
+      }
+    }
+    // desired_eden_length_by_mmu = calculate_desired_eden_length_by_mmu();
 
-    // Incorporate MMU concerns; assume that it overrides the pause time
-    // goal, as the default value has been chosen to effectively disable it.
-    uint desired_eden_length = MAX2(desired_eden_length_by_pause,
-                                    desired_eden_length_by_mmu);
+    // double base_time_ms = predict_base_time_ms(pending_cards, rs_length);
+
+    // desired_eden_length_by_pause =
+    //   calculate_desired_eden_length_by_pause(base_time_ms,
+    //                                          absolute_min_young_length - survivor_length,
+    //                                          absolute_max_young_length - survivor_length);
+
+    // // Incorporate MMU concerns; assume that it overrides the pause time
+    // // goal, as the default value has been chosen to effectively disable it.
+    // uint desired_eden_length = MAX2(desired_eden_length_by_pause,
+    //                                 desired_eden_length_by_mmu);
 
     desired_young_length = desired_eden_length + survivor_length;
   } else {
@@ -551,6 +605,12 @@ void G1Policy::record_full_collection_end() {
   double end_sec = os::elapsedTime();
 
   collector_state()->set_in_full_gc(false);
+
+  //shengkai: ignore major gc by update time record
+  update_before_stage();
+  log_info(gc, ergo)("[DEBUG] ignoring full gc! User=%lfs, Sys=%lfs, Real=%lfs",\
+                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
+  
 
   // "Nuke" the heuristics that control the young/mixed GC
   // transitions and make sure we start with young GCs after the Full GC.
@@ -995,6 +1055,18 @@ void G1Policy::report_ihop_statistics() {
 void G1Policy::record_young_gc_pause_end(bool evacuation_failed) {
   phase_times()->record_gc_pause_end();
   phase_times()->print(evacuation_failed);
+  //shengkai: calculate gc time here
+  calculate_minor_gc();
+  log_info(gc, ergo)("[DEBUG] minor gc time! User=%lfs, Sys=%lfs, Real=%lfs",\
+                    size_policy->_gc_user_time,size_policy->_gc_sys_time,size_policy->_gc_real_time);
+
+
+  //shengkai: record mutator begin
+  size_policy->update_before_stage();
+  log_info(gc, ergo)("[DEBUG] finish minor gc! User=%lfs, Sys=%lfs, Real=%lfs",\
+                    size_policy->_pre_user_time,size_policy->_pre_sys_time,size_policy->_pre_real_time);
+
+
 }
 
 double G1Policy::predict_base_time_ms(size_t pending_cards,
@@ -1562,3 +1634,45 @@ void G1Policy::transfer_survivors_to_cset(const G1SurvivorRegions* survivors) {
   // the survivor regions from this evacuation pause as 'young'
   // at the start of the next.
 }
+
+// shengkai: update time record
+// update beginning
+void G1Policy::update_before_stage(){
+  bool valid = os::getTimesSecs(&_pre_real_time,
+                                  &_pre_user_time,
+                                  &_pre_sys_time);
+  if (!valid) {
+    log_info(gc, ergo)("calculate gc fail: os::getTimesSecs() returned invalid result");
+  }
+}
+
+//shengkai: calculate mutator time this epoch
+void G1Policy::calculate_mutator(){
+  double real_time, user_time, sys_time;
+  bool valid = os::getTimesSecs(&real_time, &user_time, &sys_time);
+  if(valid){
+    user_time -= _pre_user_time;
+    sys_time -= _pre_sys_time;
+    real_time -= _pre_real_time;
+    _mut_real_time = real_time;
+    _mut_sys_time = sys_time;
+    _mut_user_time = user_time;
+  }else
+    log_info(gc, ergo)("calculate gc fail: os::getTimesSecs() returned invalid result");
+}
+
+//shengkai: calculate gc time this epoch
+void G1Policy::calculate_minor_gc(){
+  double real_time, user_time, sys_time;
+  bool valid = os::getTimesSecs(&real_time, &user_time, &sys_time);
+  if(valid){
+    user_time -= _pre_user_time;
+    sys_time -= _pre_sys_time;
+    real_time -= _pre_real_time;
+    _gc_real_time = real_time;
+    _gc_sys_time = sys_time;
+    _gc_user_time = user_time;
+  }else
+    log_info(gc, ergo)("calculate gc fail: os::getTimesSecs() returned invalid result");
+}
+
