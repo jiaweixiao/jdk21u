@@ -521,7 +521,7 @@ void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
   ZGenerationCollectionScopeYoung scope(type, timer);
 
   // [gc breakdown]
-  os::dump_accum_thread_majflt_and_cputime("beforeConcCycle");
+  os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
   GCMajfltStats gc_majflt_stats;
 
   // Phase 1: Pause Mark Start
@@ -573,7 +573,7 @@ void ZGenerationYoung::collect(ZYoungType type, ConcurrentGCTimer* timer) {
   // Phase 8: Concurrent Relocate
   concurrent_relocate();
 
-  os::dump_accum_thread_majflt_and_cputime("afterConcCycle");
+  os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
 }
 
 class VM_ZMarkStartYoungAndOld : public VM_ZOperation {
@@ -1009,7 +1009,7 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   ZGenerationCollectionScopeOld scope(timer);
 
   // [gc breakdown]
-  os::dump_accum_thread_majflt_and_cputime("beforeConcCycle");
+  os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
   GCMajfltStats gc_majflt_stats;
 
   // Phase 1: Concurrent Mark
@@ -1074,7 +1074,7 @@ void ZGenerationOld::collect(ConcurrentGCTimer* timer) {
   // Phase 10: Concurrent Relocate
   concurrent_relocate();
 
-  os::dump_accum_thread_majflt_and_cputime("afterConcCycle");
+  os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
 }
 
 void ZGenerationOld::flip_mark_start() {
