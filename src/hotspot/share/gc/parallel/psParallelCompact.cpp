@@ -1739,6 +1739,12 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
   GCMajfltStats gc_majflt_stats;
   gc_majflt_stats.start();
 
+  long majflt1, user_ms1, sys_ms1;
+  long majflt2, user_ms2, sys_ms2;
+  Ticks t1, t2;
+  t1 = Ticks::now();
+  os::get_accum_majflt_and_cputime(&majflt1, &user_ms1, &sys_ms1);
+
   GCCause::Cause gc_cause = heap->gc_cause();
   PSYoungGen* young_gen = heap->young_gen();
   PSOldGen* old_gen = heap->old_gen();
@@ -1788,11 +1794,23 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 
     ref_processor()->start_discovery(maximum_heap_compaction);
 
+    t2 = Ticks::now();
+    os::get_accum_majflt_and_cputime(&majflt2, &user_ms2, &sys_ms2);
+    log_info(gc)("PSMC timing (pre mark): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t2.value() - t1.value()), user_ms2 - user_ms1, sys_ms2 - sys_ms1);
+
     marking_phase(&_gc_tracer);
+
+    t1 = Ticks::now();
+    os::get_accum_majflt_and_cputime(&majflt1, &user_ms1, &sys_ms1);
+    log_info(gc)("PSMC timing (marking): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t1.value() - t2.value()), user_ms1 - user_ms2, sys_ms1 - sys_ms2);
 
     bool max_on_system_gc = UseMaximumCompactionOnSystemGC
       && GCCause::is_user_requested_gc(gc_cause);
     summary_phase(maximum_heap_compaction || max_on_system_gc);
+
+    t2 = Ticks::now();
+    os::get_accum_majflt_and_cputime(&majflt2, &user_ms2, &sys_ms2);
+    log_info(gc)("PSMC timing (summary): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t2.value() - t1.value()), user_ms2 - user_ms1, sys_ms2 - sys_ms1);
 
 #if COMPILER2_OR_JVMCI
     assert(DerivedPointerTable::is_active(), "Sanity");
@@ -1803,6 +1821,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
     // needed by the compaction for filling holes in the dense prefix.
     adjust_roots();
 
+    t1 = Ticks::now();
+    os::get_accum_majflt_and_cputime(&majflt1, &user_ms1, &sys_ms1);
+    log_info(gc)("PSMC timing (adjust roots): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t1.value() - t2.value()), user_ms1 - user_ms2, sys_ms1 - sys_ms2);
+
     uint active_gc_threads = ParallelScavengeHeap::heap()->workers().active_workers();
     // [gc breakdown][mem copy]
     for(uint i=0; i<active_gc_threads; i++) {
@@ -1810,6 +1832,11 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
       ParCompactionManager::gc_thread_compaction_manager(i)->reset_copy_size();
     }
     compact();
+
+    t2 = Ticks::now();
+    os::get_accum_majflt_and_cputime(&majflt2, &user_ms2, &sys_ms2);
+    log_info(gc)("PSMC timing (compact): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t2.value() - t1.value()), user_ms2 - user_ms1, sys_ms2 - sys_ms1);
+
     double copy_cycle_in_ms = 0;
     double copy_size_in_mb = 0;
     size_t copy_count = 0;
@@ -1946,6 +1973,10 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 
   _gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
+
+  t1 = Ticks::now();
+  os::get_accum_majflt_and_cputime(&majflt1, &user_ms1, &sys_ms1);
+  log_info(gc)("PSMC timing (post compact): wall %.1fms, user %ldms, sys %ldms", TimeHelper::counter_to_millis(t1.value() - t2.value()), user_ms1 - user_ms2, sys_ms1 - sys_ms2);
 
   gc_majflt_stats.end_and_log("full");
 
