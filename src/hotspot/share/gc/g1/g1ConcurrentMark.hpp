@@ -276,6 +276,10 @@ public:
   bool wait_until_scan_finished();
 };
 
+// The bin has log2(address distance in page)
+//  e.g. 0, [2,4), [4,8), ..., [1024, 2048)
+#define SIZE_OF_MARK_DISTANCE_BIN 11
+
 // This class manages data structures and methods for doing liveness analysis in
 // G1's concurrent cycle.
 class G1ConcurrentMark : public CHeapObj<mtGC> {
@@ -359,6 +363,15 @@ class G1ConcurrentMark : public CHeapObj<mtGC> {
   WorkerThreads* _concurrent_workers;
   uint      _num_concurrent_workers; // The number of marking worker threads we're using
   uint      _max_concurrent_workers; // Maximum number of marking worker threads
+
+  // [gc breakdown]
+  // Mark distance statistics for each worker
+  // Each worker has a bin with size SIZE_OF_MARK_DISTANCE_BIN
+  unsigned long** _mark_distance_page;
+  unsigned long** _mark_distance_cacheline;
+  uintptr_t* _prev_obj_addr;
+  // Array of type u64 in size of 256 to log obj addr in 2MB of a 32GB heap.
+  unsigned long** _mark_bitmap_2MB;
 
   enum class VerifyLocation {
     RemarkBefore,

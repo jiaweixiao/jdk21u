@@ -218,6 +218,46 @@ inline void G1CMTask::abort_marking_if_regular_check_fail() {
 }
 
 inline bool G1CMTask::make_reference_grey(oop obj) {
+  // We are in concurrent mark, log mark distance statistics
+  if (_cm->concurrent()) {
+    uintptr_t obj_addr = cast_from_oop<uintptr_t>(obj);
+    uintptr_t prev_addr = _cm->_prev_obj_addr[_worker_id];
+    // Page size is 4KB
+    unsigned long dist_in_page = (obj_addr >= prev_addr) ?
+      (((unsigned long)obj_addr >> 12) - ((unsigned long)prev_addr >> 12)) :
+      (((unsigned long)prev_addr >> 12) - ((unsigned long)obj_addr >> 12));
+    // Cacheline size is 64B
+    unsigned long dist_in_cl = (obj_addr >= prev_addr) ?
+      (((unsigned long)obj_addr >> 6) - ((unsigned long)prev_addr >> 6)) :
+      (((unsigned long)prev_addr >> 6) - ((unsigned long)obj_addr >> 6));
+    // For 4KB
+    uint bit_width;
+    for (bit_width = 0; bit_width < SIZE_OF_MARK_DISTANCE_BIN; ++bit_width) {
+      if (dist_in_page == 0) {
+        break;
+      }
+      dist_in_page >>= 1;
+    }
+    _cm->_mark_distance_page[_worker_id][bit_width] += 1;
+    // For 64B
+    for (bit_width = 0; bit_width < SIZE_OF_MARK_DISTANCE_BIN; ++bit_width) {
+      if (dist_in_cl == 0) {
+        break;
+      }
+      dist_in_cl >>= 1;
+    }
+    _cm->_mark_distance_cacheline[_worker_id][bit_width] += 1;
+    _cm->_prev_obj_addr[_worker_id] = obj_addr;
+    // For 2MB bitmap
+    // Each value in _mark_bitmap_2MB is a bitmap for 64 2M pages
+    unsigned long addr_2MB = (obj_addr - (uintptr_t)_g1h->reserved().start()) >> 20;
+    uint addr_hi = addr_2MB >> 6;
+    unsigned long addr_lo_in_bit = 1 << (addr_2MB & 0x3f);
+    if (addr_hi < 256) {
+      _cm->_mark_bitmap_2MB[_worker_id][addr_hi] |= addr_lo_in_bit;
+    }
+  }
+
   if (!_cm->mark_in_bitmap(_worker_id, obj)) {
     return false;
   }

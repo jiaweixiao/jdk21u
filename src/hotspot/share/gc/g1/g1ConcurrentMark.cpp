@@ -452,6 +452,24 @@ G1ConcurrentMark::G1ConcurrentMark(G1CollectedHeap* g1h,
     _accum_task_vtime[i] = 0.0;
   }
 
+  _mark_distance_page = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
+  _mark_distance_cacheline = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
+  _mark_bitmap_2MB = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
+  _prev_obj_addr = NEW_C_HEAP_ARRAY(uintptr_t, _max_concurrent_workers, mtGC);
+  for (uint i = 0; i < _max_concurrent_workers; ++i) {
+      uint bin_size = SIZE_OF_MARK_DISTANCE_BIN;
+      _mark_distance_page[i] = NEW_C_HEAP_ARRAY(unsigned long, bin_size, mtGC);
+      _mark_distance_cacheline[i] = NEW_C_HEAP_ARRAY(unsigned long, bin_size, mtGC);
+      // Array of u64 in 256 to log obj addr in 2MB of a 32GB heap.
+      _mark_bitmap_2MB[i] = NEW_C_HEAP_ARRAY(unsigned long, 256, mtGC);
+      for (uint j = 0; j < bin_size; ++j) {
+        _mark_distance_page[i][j] = 0;
+        _mark_distance_cacheline[i][j] = 0;
+      }
+      _prev_obj_addr[i] = 0;
+      memset(_mark_bitmap_2MB[i], 0, sizeof(unsigned long) * 256);
+  }
+
   reset_at_marking_complete();
 }
 
@@ -559,6 +577,16 @@ void G1ConcurrentMark::reset_at_marking_complete() {
 G1ConcurrentMark::~G1ConcurrentMark() {
   FREE_C_HEAP_ARRAY(HeapWord*, _top_at_rebuild_starts);
   FREE_C_HEAP_ARRAY(G1RegionMarkStats, _region_mark_stats);
+  for (uint i = 0; i < _max_concurrent_workers; ++i) {
+    FREE_C_HEAP_ARRAY(unsigned long, _mark_distance_page[i]);
+    FREE_C_HEAP_ARRAY(unsigned long, _mark_distance_cacheline[i]);
+    FREE_C_HEAP_ARRAY(unsigned long, _mark_bitmap_2MB[i]);
+  }
+  FREE_C_HEAP_ARRAY(unsigned long*, _mark_distance_page);
+  FREE_C_HEAP_ARRAY(unsigned long*, _mark_distance_cacheline);
+  FREE_C_HEAP_ARRAY(uintptr_t, _prev_obj_addr);
+  FREE_C_HEAP_ARRAY(unsigned long*, _mark_bitmap_2MB);
+
   // The G1ConcurrentMark instance is never freed.
   ShouldNotReachHere();
 }
@@ -1048,8 +1076,39 @@ void G1ConcurrentMark::mark_from_roots() {
   // Parallel task terminator is set in "set_concurrency_and_phase()"
   set_concurrency_and_phase(active_workers, true /* concurrent */);
 
+  // Reset mark distance statistics
+  for (uint i = 0; i < _max_concurrent_workers; ++i) {
+    uint bin_size = SIZE_OF_MARK_DISTANCE_BIN;
+    for (uint j = 0; j < bin_size; ++j) {
+      _mark_distance_page[i][j] = 0;
+      _mark_distance_cacheline[i][j] = 0;
+    }
+    _prev_obj_addr[i] = 0;
+    memset(_mark_bitmap_2MB[i], 0, sizeof(unsigned long) * 256);
+  }
+
   G1CMConcurrentMarkingTask marking_task(this);
   _concurrent_workers->run_task(&marking_task);
+
+  // Print mark distance statistics
+  for (uint i = 0; i < _max_concurrent_workers; ++i) {
+    unsigned long* bin_pg = _mark_distance_page[i];
+    unsigned long* bin_cl = _mark_distance_cacheline[i];
+    log_info(gc, marking)("mark dist 4KB worker %u: %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu",
+      i, bin_pg[0], bin_pg[1], bin_pg[2], bin_pg[3], bin_pg[4], bin_pg[5], bin_pg[6], bin_pg[7], bin_pg[8], bin_pg[9], bin_pg[10]);
+    log_info(gc, marking)("mark dist 64B worker %u: %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu",
+      i, bin_cl[0], bin_cl[1], bin_cl[2], bin_cl[3], bin_cl[4], bin_cl[5], bin_cl[6], bin_cl[7], bin_cl[8], bin_cl[9], bin_cl[10]);
+  }
+  for (uint i = 0; i < 256; ++i) {
+    unsigned long tmp_bitmap = 0;
+    for (uint j = 0; j < _max_concurrent_workers; ++j) {
+      tmp_bitmap |= _mark_bitmap_2MB[j][i];
+    }
+    if (tmp_bitmap > 0) {
+      log_info(gc, marking)("mark bitmap 2M %u: %lx", i, tmp_bitmap);
+    }
+  }
+
   print_stats();
 }
 
