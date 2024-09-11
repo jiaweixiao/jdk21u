@@ -223,13 +223,13 @@ inline bool G1CMTask::make_reference_grey(oop obj) {
     uintptr_t obj_addr = cast_from_oop<uintptr_t>(obj);
     uintptr_t prev_addr = _cm->_prev_obj_addr[_worker_id];
     // Page size is 4KB
-    unsigned long dist_in_page = (obj_addr >= prev_addr) ?
-      (((unsigned long)obj_addr >> 12) - ((unsigned long)prev_addr >> 12)) :
-      (((unsigned long)prev_addr >> 12) - ((unsigned long)obj_addr >> 12));
+    uintptr_t dist_in_page = (obj_addr >= prev_addr) ?
+      ((obj_addr >> 12) - (prev_addr >> 12)) :
+      ((prev_addr >> 12) - (obj_addr >> 12));
     // Cacheline size is 64B
-    unsigned long dist_in_cl = (obj_addr >= prev_addr) ?
-      (((unsigned long)obj_addr >> 6) - ((unsigned long)prev_addr >> 6)) :
-      (((unsigned long)prev_addr >> 6) - ((unsigned long)obj_addr >> 6));
+    uintptr_t dist_in_cl = (obj_addr >= prev_addr) ?
+      ((obj_addr >> 6) - (prev_addr >> 6)) :
+      ((prev_addr >> 6) - (obj_addr >> 6));
     // For 4KB
     uint bit_width;
     for (bit_width = 0; bit_width < SIZE_OF_MARK_DISTANCE_BIN; ++bit_width) {
@@ -248,13 +248,12 @@ inline bool G1CMTask::make_reference_grey(oop obj) {
     }
     _cm->_mark_distance_cacheline[_worker_id][bit_width] += 1;
     _cm->_prev_obj_addr[_worker_id] = obj_addr;
-    // For 2MB bitmap
-    // Each value in _mark_bitmap_2MB is a bitmap for 64 2M pages
-    unsigned long addr_2MB = (obj_addr - (uintptr_t)_g1h->reserved().start()) >> 20;
-    uint addr_hi = addr_2MB >> 6;
-    unsigned long addr_lo_in_bit = 1 << (addr_2MB & 0x3f);
-    if (addr_hi < 256) {
-      _cm->_mark_bitmap_2MB[_worker_id][addr_hi] |= addr_lo_in_bit;
+    // For distribution of 4KB pages
+    uintptr_t addr_4kb = (obj_addr - (uintptr_t)(_g1h->reserved().start())) >> 12;
+    if (addr_4kb < LEN_OF_MARK_PAGE_ARRAY) {
+      if (_cm->_mark_wss_4KB[_worker_id][addr_4kb] < 254) {// UINT8_MAX = 255
+        _cm->_mark_wss_4KB[_worker_id][addr_4kb] += 1;
+      }
     }
   }
 

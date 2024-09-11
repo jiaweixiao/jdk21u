@@ -279,6 +279,8 @@ public:
 // The bin has log2(address distance in page)
 //  e.g. 0, [2,4), [4,8), ..., [1024, 2048)
 #define SIZE_OF_MARK_DISTANCE_BIN 11
+// For a 32gb heap, we have 8 * 1024 * 1024 4KB pages
+#define LEN_OF_MARK_PAGE_ARRAY (8 * 1024 * 1024)
 
 // This class manages data structures and methods for doing liveness analysis in
 // G1's concurrent cycle.
@@ -367,11 +369,12 @@ class G1ConcurrentMark : public CHeapObj<mtGC> {
   // [gc breakdown]
   // Mark distance statistics for each worker
   // Each worker has a bin with size SIZE_OF_MARK_DISTANCE_BIN
-  unsigned long** _mark_distance_page;
-  unsigned long** _mark_distance_cacheline;
+  uintptr_t** _mark_distance_page;
+  uintptr_t** _mark_distance_cacheline;
   uintptr_t* _prev_obj_addr;
-  // Array of type u64 in size of 256 to log obj addr in 2MB of a 32GB heap.
-  unsigned long** _mark_bitmap_2MB;
+  // Array of char to log number of marked obj addr in 4KB grain of a 32GB heap.
+  // Each worker has a array with length of LEN_OF_MARK_PAGE_ARRAY
+  uint8_t** _mark_wss_4KB;
 
   enum class VerifyLocation {
     RemarkBefore,

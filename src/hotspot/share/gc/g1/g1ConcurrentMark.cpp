@@ -452,22 +452,21 @@ G1ConcurrentMark::G1ConcurrentMark(G1CollectedHeap* g1h,
     _accum_task_vtime[i] = 0.0;
   }
 
-  _mark_distance_page = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
-  _mark_distance_cacheline = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
-  _mark_bitmap_2MB = NEW_C_HEAP_ARRAY(unsigned long*, _max_concurrent_workers, mtGC);
+  _mark_distance_page = NEW_C_HEAP_ARRAY(uintptr_t*, _max_concurrent_workers, mtGC);
+  _mark_distance_cacheline = NEW_C_HEAP_ARRAY(uintptr_t*, _max_concurrent_workers, mtGC);
+  _mark_wss_4KB = NEW_C_HEAP_ARRAY(uint8_t*, _max_concurrent_workers, mtGC);
   _prev_obj_addr = NEW_C_HEAP_ARRAY(uintptr_t, _max_concurrent_workers, mtGC);
   for (uint i = 0; i < _max_concurrent_workers; ++i) {
       uint bin_size = SIZE_OF_MARK_DISTANCE_BIN;
-      _mark_distance_page[i] = NEW_C_HEAP_ARRAY(unsigned long, bin_size, mtGC);
-      _mark_distance_cacheline[i] = NEW_C_HEAP_ARRAY(unsigned long, bin_size, mtGC);
-      // Array of u64 in 256 to log obj addr in 2MB of a 32GB heap.
-      _mark_bitmap_2MB[i] = NEW_C_HEAP_ARRAY(unsigned long, 256, mtGC);
+      _mark_distance_page[i] = NEW_C_HEAP_ARRAY(uintptr_t, bin_size, mtGC);
+      _mark_distance_cacheline[i] = NEW_C_HEAP_ARRAY(uintptr_t, bin_size, mtGC);
+      _mark_wss_4KB[i] = NEW_C_HEAP_ARRAY(uint8_t, LEN_OF_MARK_PAGE_ARRAY, mtGC);
       for (uint j = 0; j < bin_size; ++j) {
         _mark_distance_page[i][j] = 0;
         _mark_distance_cacheline[i][j] = 0;
       }
       _prev_obj_addr[i] = 0;
-      memset(_mark_bitmap_2MB[i], 0, sizeof(unsigned long) * 256);
+      memset(_mark_wss_4KB[i], 0, sizeof(uint8_t) * LEN_OF_MARK_PAGE_ARRAY);
   }
 
   reset_at_marking_complete();
@@ -578,14 +577,14 @@ G1ConcurrentMark::~G1ConcurrentMark() {
   FREE_C_HEAP_ARRAY(HeapWord*, _top_at_rebuild_starts);
   FREE_C_HEAP_ARRAY(G1RegionMarkStats, _region_mark_stats);
   for (uint i = 0; i < _max_concurrent_workers; ++i) {
-    FREE_C_HEAP_ARRAY(unsigned long, _mark_distance_page[i]);
-    FREE_C_HEAP_ARRAY(unsigned long, _mark_distance_cacheline[i]);
-    FREE_C_HEAP_ARRAY(unsigned long, _mark_bitmap_2MB[i]);
+    FREE_C_HEAP_ARRAY(uintptr_t, _mark_distance_page[i]);
+    FREE_C_HEAP_ARRAY(uintptr_t, _mark_distance_cacheline[i]);
+    FREE_C_HEAP_ARRAY(uint8_t, _mark_wss_4KB[i]);
   }
-  FREE_C_HEAP_ARRAY(unsigned long*, _mark_distance_page);
-  FREE_C_HEAP_ARRAY(unsigned long*, _mark_distance_cacheline);
+  FREE_C_HEAP_ARRAY(uintptr_t*, _mark_distance_page);
+  FREE_C_HEAP_ARRAY(uintptr_t*, _mark_distance_cacheline);
   FREE_C_HEAP_ARRAY(uintptr_t, _prev_obj_addr);
-  FREE_C_HEAP_ARRAY(unsigned long*, _mark_bitmap_2MB);
+  FREE_C_HEAP_ARRAY(uint8_t*, _mark_wss_4KB);
 
   // The G1ConcurrentMark instance is never freed.
   ShouldNotReachHere();
@@ -1084,7 +1083,7 @@ void G1ConcurrentMark::mark_from_roots() {
       _mark_distance_cacheline[i][j] = 0;
     }
     _prev_obj_addr[i] = 0;
-    memset(_mark_bitmap_2MB[i], 0, sizeof(unsigned long) * 256);
+    memset(_mark_wss_4KB[i], 0, sizeof(uint8_t) * 256);
   }
 
   G1CMConcurrentMarkingTask marking_task(this);
@@ -1099,15 +1098,29 @@ void G1ConcurrentMark::mark_from_roots() {
     log_info(gc, marking)("mark dist 64B worker %u: %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu, %lu",
       i, bin_cl[0], bin_cl[1], bin_cl[2], bin_cl[3], bin_cl[4], bin_cl[5], bin_cl[6], bin_cl[7], bin_cl[8], bin_cl[9], bin_cl[10]);
   }
-  for (uint i = 0; i < 256; ++i) {
-    unsigned long tmp_bitmap = 0;
+
+  // Print distribution of touched pages
+  uint bin_touch_pages[256] = {0};
+  for (uint i = 0; i < LEN_OF_MARK_PAGE_ARRAY; ++i) {
+    uint accum = 0;
     for (uint j = 0; j < _max_concurrent_workers; ++j) {
-      tmp_bitmap |= _mark_bitmap_2MB[j][i];
+      accum += _mark_wss_4KB[j][i];
     }
-    if (tmp_bitmap > 0) {
-      log_info(gc, marking)("mark bitmap 2M %u: %lx", i, tmp_bitmap);
+    // if (accum > 0) {
+    //   log_info(gc, marking)("touch page %u: %u", i, accum);
+    // }
+    if (accum > 0 && accum <= 255) {
+      bin_touch_pages[accum] += 1;
+    } else if (accum > 255) {
+      bin_touch_pages[0] += 1;
     }
   }
+  for (uint i = 1; i < 256; ++i) {
+    if (bin_touch_pages[i] > 0) {
+      log_info(gc, marking)("%u pages were touched %u times", bin_touch_pages[i], i);
+    }
+  }
+  log_info(gc, marking)("%u pages were touched > 255 times", bin_touch_pages[0]);
 
   print_stats();
 }
