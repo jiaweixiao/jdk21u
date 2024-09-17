@@ -290,6 +290,8 @@ class os: AllStatic {
   static void dump_current_thread_majflt_minflt_and_cputime(const char *prefix);
   // Dump the number of page major fault, user and sys time of java and non-java threads since the start of jvm.
   static void dump_accum_thread_majflt_minflt_and_cputime(const char *prefix);
+  // Dump current refault stats in system wide.
+  static void dump_accum_refault(const char *prefix);
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone

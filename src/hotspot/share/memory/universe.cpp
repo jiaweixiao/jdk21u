@@ -844,6 +844,7 @@ jint Universe::initialize_heap() {
   log_info(gc)("Majflt(init heap)=%ld", majflt);
   log_info(gc)("Minflt(init heap)=%ld", minflt);
   os::dump_accum_thread_majflt_minflt_and_cputime("Init heap");
+  os::dump_accum_refault("Init heap");
 
   _collectedHeap = GCConfig::arguments()->create_heap();
 

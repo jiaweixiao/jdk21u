@@ -1584,6 +1584,45 @@ void os::dump_accum_thread_majflt_minflt_and_cputime(const char *prefix) {
     njt_majflt, njt_minflt, njt_user_time, njt_sys_time);
 }
 
+// Need kernel support
+// https://github.com/jiaweixiao/linux-5.11/commit/07fc61abd6e3a5e792ee565df9d23b5d1b848f45
+static inline void proc_refault(unsigned long* refault_anon, unsigned long* refault_file, unsigned long* activate_anon, unsigned long* activate_file) {
+  struct swap_stats{
+    unsigned long demand_swapin_cnt;
+    unsigned long demand_swapin_time_us;
+    unsigned long non_demand_swapin_cnt;
+    unsigned long non_demand_swapin_time_us;
+    unsigned long swapin_blocked_by_swapout_cnt;
+    unsigned long swapin_blocked_by_swapout_time_us;
+    unsigned long non_swap_cnt;
+    unsigned long non_swap_time_us;
+    unsigned long swap_readpage_cnt;
+    unsigned long swap_readpage_async_cnt;
+    unsigned long workingset_refault_anon;           // Number of refaults of previously evicted anonymous pages
+    unsigned long workingset_refault_file;           // Number of refaults of previously evicted file pages
+    unsigned long workingset_activate_anon;          // Number of refaulted anonymous pages that were immediately activated
+    unsigned long workingset_activate_file;          // Number of refaulted file pages that were immediately activated
+  } s;
+
+  if (syscall(452, &s) == 0) {
+    *refault_anon = s.workingset_refault_anon;
+    *refault_file = s.workingset_refault_file;
+    *activate_anon = s.workingset_activate_anon;
+    *activate_file = s.workingset_activate_file;
+  } else {
+    *refault_anon = 0;
+    *refault_file = 0;
+    *activate_anon = 0;
+    *activate_file = 0;
+  }
+}
+
+void os::dump_accum_refault(const char *prefix) {
+  unsigned long refault_anon, refault_file, activate_anon, activate_file;
+  proc_refault(&refault_anon, &refault_file, &activate_anon, &activate_file);
+  log_info(gc)("%s Workingset refault_anon=%lu, refault_file=%lu, activate_anon=%lu, activate_file=%lu)", prefix, refault_anon, refault_file, activate_anon, activate_file);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // time support
 double os::elapsedVTime() {
