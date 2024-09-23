@@ -114,6 +114,8 @@ class Mutex;
 
 struct jvmtiTimerInfo;
 
+struct kernel_stats;
+
 template<class E> class GrowableArray;
 
 // %%%%% Moved ThreadState, START_FN, OSThread to new osThread.hpp. -- Rose
@@ -290,8 +292,12 @@ class os: AllStatic {
   static void dump_current_thread_majflt_minflt_and_cputime(const char *prefix);
   // Dump the number of page major fault, user and sys time of java and non-java threads since the start of jvm.
   static void dump_accum_thread_majflt_minflt_and_cputime(const char *prefix);
-  // Dump current refault stats in system wide.
-  static void dump_accum_refault(const char *prefix);
+  // Reset kernel stats.
+  static void reset_kernel_stats();
+  // Print header of kernel stats of dump_accum_kernel_stats()
+  static void print_kernel_stats_header();
+  // Dump current kernel stats in system wide.
+  static void dump_accum_kernel_stats(const char *prefix);
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone

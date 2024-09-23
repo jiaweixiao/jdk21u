@@ -1586,41 +1586,47 @@ void os::dump_accum_thread_majflt_minflt_and_cputime(const char *prefix) {
 
 // Need kernel support
 // https://github.com/jiaweixiao/linux-5.11/commit/07fc61abd6e3a5e792ee565df9d23b5d1b848f45
-static inline void proc_refault(unsigned long* refault_anon, unsigned long* refault_file, unsigned long* activate_anon, unsigned long* activate_file) {
-  struct swap_stats{
-    unsigned long demand_swapin_cnt;
-    unsigned long demand_swapin_time_us;
-    unsigned long non_demand_swapin_cnt;
-    unsigned long non_demand_swapin_time_us;
-    unsigned long swapin_blocked_by_swapout_cnt;
-    unsigned long swapin_blocked_by_swapout_time_us;
-    unsigned long non_swap_cnt;
-    unsigned long non_swap_time_us;
-    unsigned long swap_readpage_cnt;
-    unsigned long swap_readpage_async_cnt;
-    unsigned long workingset_refault_anon;           // Number of refaults of previously evicted anonymous pages
-    unsigned long workingset_refault_file;           // Number of refaults of previously evicted file pages
-    unsigned long workingset_activate_anon;          // Number of refaulted anonymous pages that were immediately activated
-    unsigned long workingset_activate_file;          // Number of refaulted file pages that were immediately activated
-  } s;
+struct kernel_stats {
+  unsigned long demand_swapin_cnt;
+  unsigned long demand_swapin_time_us;
+  unsigned long non_demand_swapin_cnt;
+  unsigned long non_demand_swapin_time_us;
+  unsigned long swapin_blocked_by_swapout_cnt;
+  unsigned long swapin_blocked_by_swapout_time_us;
+  unsigned long non_swap_cnt;
+  unsigned long non_swap_time_us;
+  unsigned long swap_readpage_cnt;
+  unsigned long swap_readpage_async_cnt;
+  unsigned long swap_writepage_cnt;
+  unsigned long workingset_refault_anon;           // Number of refaults of previously evicted anonymous pages
+  unsigned long workingset_refault_file;           // Number of refaults of previously evicted file pages
+  unsigned long workingset_activate_anon;          // Number of refaulted anonymous pages that were immediately activated
+  unsigned long workingset_activate_file;          // Number of refaulted file pages that were immediately activated
+  unsigned long workingset_restore_anon;           // Number of restored anonymous pages which have been detected as an active workingset before they got reclaimed
+  unsigned long workingset_restore_file;           // Number of restored file pages which have been detected as an active workingset before they got reclaimed
+};
 
-  if (syscall(452, &s) == 0) {
-    *refault_anon = s.workingset_refault_anon;
-    *refault_file = s.workingset_refault_file;
-    *activate_anon = s.workingset_activate_anon;
-    *activate_file = s.workingset_activate_file;
-  } else {
-    *refault_anon = 0;
-    *refault_file = 0;
-    *activate_anon = 0;
-    *activate_file = 0;
-  }
+void os::reset_kernel_stats() {
+  syscall(451);
 }
 
-void os::dump_accum_refault(const char *prefix) {
-  unsigned long refault_anon, refault_file, activate_anon, activate_file;
-  proc_refault(&refault_anon, &refault_file, &activate_anon, &activate_file);
-  log_info(gc)("%s Workingset refault_anon=%lu, refault_file=%lu, activate_anon=%lu, activate_file=%lu)", prefix, refault_anon, refault_file, activate_anon, activate_file);
+static inline int get_kernel_stats(struct kernel_stats* s) {
+  return syscall(452, s);
+}
+
+void os::print_kernel_stats_header() {
+  log_info(gc)("kernel stats (demand_swapin_cnt,non_demand_swapin_cnt,swapin_blocked_by_swapout_cnt,non_swap_cnt,swap_readpage_cnt,swap_readpage_async_cnt,swap_writepage_cnt,workingset_refault_anon,workingset_activate_anon,workingset_restore_anon)");
+}
+
+void os::dump_accum_kernel_stats(const char *prefix) {
+  struct kernel_stats s;
+  get_kernel_stats(&s);
+  log_info(gc)("%s kernel stats (%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu)",
+    prefix,
+    s.demand_swapin_cnt, s.non_demand_swapin_cnt, s.swapin_blocked_by_swapout_cnt,
+    s.non_swap_cnt,
+    s.swap_readpage_cnt, s.swap_readpage_async_cnt, s.swap_writepage_cnt,
+    s.workingset_refault_anon, s.workingset_activate_anon, s.workingset_restore_anon);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

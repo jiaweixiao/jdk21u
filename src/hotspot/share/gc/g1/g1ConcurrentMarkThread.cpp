@@ -123,7 +123,7 @@ void G1ConcurrentMarkThread::run_service() {
     GCTraceConcTime(Info, gc) tt(title);
 
     os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
-    os::dump_accum_refault("beforeConcCycle");
+    os::dump_accum_kernel_stats("beforeConcCycle");
     concurrent_cycle_start();
 
     if (_state == FullMark) {
@@ -135,7 +135,7 @@ void G1ConcurrentMarkThread::run_service() {
 
     concurrent_cycle_end(_state == FullMark && !_cm->has_aborted());
     os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
-    os::dump_accum_refault("afterConcCycle");
+    os::dump_accum_kernel_stats("afterConcCycle");
 
     _vtime_accum = (os::elapsedVTime() - _vtime_start);
   }

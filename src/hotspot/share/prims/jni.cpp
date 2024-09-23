@@ -3519,6 +3519,8 @@ DT_RETURN_MARK_DECL(CreateJavaVM, jint
                     , HOTSPOT_JNI_CREATEJAVAVM_RETURN(_ret_ref));
 
 static jint JNI_CreateJavaVM_inner(JavaVM **vm, void **penv, void *args) {
+  os::reset_kernel_stats();
+
   HOTSPOT_JNI_CREATEJAVAVM_ENTRY((void **) vm, penv, args);
 
   jint result = JNI_ERR;
