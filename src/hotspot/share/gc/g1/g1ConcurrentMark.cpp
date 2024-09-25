@@ -1083,7 +1083,7 @@ void G1ConcurrentMark::mark_from_roots() {
       _mark_distance_cacheline[i][j] = 0;
     }
     _prev_obj_addr[i] = 0;
-    memset(_mark_wss_4KB[i], 0, sizeof(uint8_t) * 256);
+    memset(_mark_wss_4KB[i], 0, sizeof(uint8_t) * LEN_OF_MARK_PAGE_ARRAY);
   }
 
   G1CMConcurrentMarkingTask marking_task(this);
