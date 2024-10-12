@@ -361,7 +361,8 @@ bool PSScavenge::invoke_no_policy() {
 
   _gc_timer.register_gc_start();
 
-  // [gc breakdown]
+  // [gc breakdown] [swapout garbage]
+  os::reset_system_range_free_spaces();
   GCMajfltStats gc_majflt_stats;
   gc_majflt_stats.start();
 
@@ -675,6 +676,19 @@ bool PSScavenge::invoke_no_policy() {
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
 
   gc_majflt_stats.end_and_log("young");
+  HeapWord* from_top = young_gen->from_space()->top();
+  size_t from_free = young_gen->from_space()->free_in_bytes();
+  HeapWord* to_top = young_gen->to_space()->top();
+  size_t to_free = young_gen->to_space()->free_in_bytes();
+  HeapWord* old_top = old_gen->object_space()->top();
+  size_t old_free = old_gen->free_in_bytes();
+  os::set_system_range_from_to_old_free_space(
+    from_top, from_free, to_top, to_free, old_top, old_free);
+  log_info(gc, heap)(
+    "free range(young gc): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+    p2i(from_top), p2i(from_top) + from_free,
+    p2i(to_top), p2i(to_top) + to_free,
+    p2i(old_top), p2i(old_top) + old_free);
 
   return !promotion_failure_occurred;
 }

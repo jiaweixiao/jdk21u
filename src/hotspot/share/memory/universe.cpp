@@ -838,19 +838,19 @@ jint universe_init() {
 jint Universe::initialize_heap() {
   assert(_collectedHeap == nullptr, "Heap already created");
 
-  // [gc breakdown][range majflt]
-  if (UseProfileRegionMajflt) {
-    log_info(gc)("Majflt(init heap)=%ld", os::accumMajflt());
-    os::reset_system_range_majflt_stats();
+  // [gc breakdown][range majflt][swapout garbage]
+  log_info(gc)("Majflt(init heap)=%ld", os::accumMajflt());
+  os::reset_system_range_majflt_stats();
 
-    RangeMajfltStats sys_stats, proc_stats;
-    // os::get_system_range_majflt_stats(&sys_stats);
-    os::accum_proc_range_majflt(&proc_stats);
-    // log_info(gc)("SysRegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
-    //   sys_stats.majflt, sys_stats.majflt_in_range0, sys_stats.majflt_in_range1);
-    log_info(gc)("RegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
-      proc_stats.majflt, proc_stats.majflt_in_range0, proc_stats.majflt_in_range1);
-  }
+  KernelStats sys_stats, proc_stats;
+  os::get_system_kernel_majflt_stats(&sys_stats);
+  log_info(gc)(
+    "SysKernelStats(init heap) majflt %ld, in young %ld, in old %ld, swapout in heap %ld, swapout in heap free %ld)",
+    sys_stats.majflt, sys_stats.majflt_in_young, sys_stats.majflt_in_old,
+    sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free_space);
+  // os::accum_proc_range_majflt(&proc_stats);
+  // log_info(gc)("RegionMajflt(init heap) majflt %ld, in young %ld, in old %ld",
+  // proc_stats.majflt, proc_stats.majflt_in_young, proc_stats.majflt_in_old);
 
   _collectedHeap = GCConfig::arguments()->create_heap();
 

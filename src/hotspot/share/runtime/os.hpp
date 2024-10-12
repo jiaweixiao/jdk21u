@@ -152,10 +152,12 @@ typedef void (*java_call_t)(JavaValue* value, const methodHandle& method, JavaCa
 
 class MallocTracker;
 
-struct RangeMajfltStats {
+struct KernelStats {
   size_t majflt;
-  size_t majflt_in_range0;
-  size_t majflt_in_range1;
+  size_t majflt_in_young;
+  size_t majflt_in_old;
+  size_t swapout_in_heap;
+  size_t swapout_in_heap_free_space;
 };
 
 class os: AllStatic {
@@ -294,12 +296,32 @@ class os: AllStatic {
   static void dump_thread_majflt_and_cputime();
 
   // [gc breakdown][range majflt]
-  static void set_majflt_ranges(size_t range0_base, size_t range0_size, size_t range1_base, size_t range1_size);
+  // Range ID:
+  //   range 0: young space
+  //   range 1: old space
+  static void set_majflt_ranges(HeapWord* young_base, size_t young_size,
+                                HeapWord* old_base, size_t old_size);
   static void reset_system_range_majflt_stats();
-  static void get_system_range_majflt_stats(RangeMajfltStats* stats);
-  static void accum_proc_range_majflt(RangeMajfltStats* stats);
-  static void current_thread_range_majflt(RangeMajfltStats* stats);
+  static void get_system_kernel_majflt_stats(KernelStats* stats);
+  static void accum_proc_range_majflt(KernelStats* stats);
+  static void current_thread_range_majflt(KernelStats* stats);
   static void dump_thread_range_majflt();
+
+  // [swapout garbage]
+  // Note: We only profile swapout garbage during non pause stage.
+  //   1. reset free space range of heap before gc.
+  //   2. set free space of from and to and space before jvm init and after gc.
+  //   3. change free space of old gen after alloc fail from young space.
+  //   4. (optional) change free space of eden after allocating tlab.
+  // Range ID:
+  //   range 2: from free space
+  //   range 3: to free space
+  //   range 4: old free space
+  static void reset_system_range_free_spaces();
+  static void set_system_range_from_to_old_free_space(
+    HeapWord* from_free_base, size_t from_free_size,
+    HeapWord* to_free_base, size_t to_free_size,
+    HeapWord* old_free_base, size_t old_free_size);
 
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone

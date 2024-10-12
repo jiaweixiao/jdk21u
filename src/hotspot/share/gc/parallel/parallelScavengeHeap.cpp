@@ -127,24 +127,36 @@ jint ParallelScavengeHeap::initialize() {
     return JNI_ENOMEM;
   }
 
-  // 
+  //
   // [gc breakdown][range majflt]
   // PS reserves young and old heap in fixed size at startup,
   // the resize policy result will be clamped in reserved space.
   // Thus we init the bitmap at startup and can use it until JVM exits.
-  // 
-  if (UseProfileRegionMajflt) {
-    // Init majflt region bitmap
-    size_t range0_base = (uintptr_t)(young_gen()->reserved().start());
-    size_t range0_size = young_gen()->reserved().byte_size();
-    size_t range1_base = (uintptr_t)(old_gen()->reserved().start());
-    size_t range1_size = old_gen()->reserved().byte_size();
-    os::set_majflt_ranges(range0_base, range0_size, range1_base, range1_size);
-    log_info(gc, init)("range 0 [" PTR_FORMAT ", " PTR_FORMAT "]"
-                       "range 1 [" PTR_FORMAT ", " PTR_FORMAT "]",
-                       p2i((char*)range0_base), p2i((char*)(range0_base+range0_size)),
-                       p2i((char*)range1_base), p2i((char*)(range1_base+range1_size)));
-  }
+  //
+  // Init majflt region bitmap
+  HeapWord* young_base = young_gen()->reserved().start();
+  size_t young_size = young_gen()->reserved().byte_size();
+  HeapWord* old_base = old_gen()->reserved().start();
+  size_t old_size = old_gen()->reserved().byte_size();
+  os::set_majflt_ranges(young_base, young_size, old_base, old_size);
+  log_info(gc, init)("range 0 [" PTR_FORMAT ", " PTR_FORMAT "]"
+                      "range 1 [" PTR_FORMAT ", " PTR_FORMAT "]",
+                      p2i(young_base), p2i(young_base) + young_size,
+                      p2i(old_base), p2i(old_base) + old_size);
+  // Set free range
+  HeapWord* from_top = young_gen()->from_space()->top();
+  size_t from_free = young_gen()->from_space()->free_in_bytes();
+  HeapWord* to_top = young_gen()->to_space()->top();
+  size_t to_free = young_gen()->to_space()->free_in_bytes();
+  HeapWord* old_top = old_gen()->object_space()->top();
+  size_t old_free = old_gen()->free_in_bytes();
+  os::set_system_range_from_to_old_free_space(
+    from_top, from_free, to_top, to_free, old_top, old_free);
+  log_info(gc, heap)(
+    "free range(init heap): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+    p2i(from_top), p2i(from_top) + from_free,
+    p2i(to_top), p2i(to_top) + to_free,
+    p2i(old_top), p2i(old_top) + old_free);
 
   ParallelInitLogger::print();
 
@@ -304,8 +316,27 @@ HeapWord* ParallelScavengeHeap::mem_allocate(
   // limit is being exceeded as checked below.
   *gc_overhead_limit_was_exceeded = false;
 
-  HeapWord* result = !UseParallelFullMarkCompactGC ? young_gen()->allocate(size)
-                                                   : old_gen()->allocate(size);
+  HeapWord* result = nullptr;
+  if (!UseParallelFullMarkCompactGC) {
+    result = young_gen()->allocate(size);
+  } else {
+    result = old_gen()->allocate(size);
+    if (result != nullptr) {
+      HeapWord* from_top = young_gen()->from_space()->top();
+      size_t from_free = young_gen()->from_space()->free_in_bytes();
+      HeapWord* to_top = young_gen()->to_space()->top();
+      size_t to_free = young_gen()->to_space()->free_in_bytes();
+      HeapWord* old_top = old_gen()->object_space()->top();
+      size_t old_free = old_gen()->free_in_bytes();
+      os::set_system_range_from_to_old_free_space(
+        from_top, from_free, to_top, to_free, old_top, old_free);
+      log_info(gc, heap)(
+        "free range(mem alloc): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+        p2i(from_top), p2i(from_top) + from_free,
+        p2i(to_top), p2i(to_top) + to_free,
+        p2i(old_top), p2i(old_top) + old_free);
+    }
+  }
 
   uint loop_count = 0;
   uint gc_count = 0;
@@ -327,8 +358,26 @@ HeapWord* ParallelScavengeHeap::mem_allocate(
       MutexLocker ml(Heap_lock);
       gc_count = total_collections();
 
-      result = !UseParallelFullMarkCompactGC ? young_gen()->allocate(size)
-                                             : old_gen()->allocate(size);
+      if (!UseParallelFullMarkCompactGC) {
+        result = young_gen()->allocate(size);
+      } else {
+        result = old_gen()->allocate(size);
+        if (result != nullptr) {
+          HeapWord* from_top = young_gen()->from_space()->top();
+          size_t from_free = young_gen()->from_space()->free_in_bytes();
+          HeapWord* to_top = young_gen()->to_space()->top();
+          size_t to_free = young_gen()->to_space()->free_in_bytes();
+          HeapWord* old_top = old_gen()->object_space()->top();
+          size_t old_free = old_gen()->free_in_bytes();
+          os::set_system_range_from_to_old_free_space(
+            from_top, from_free, to_top, to_free, old_top, old_free);
+          log_info(gc, heap)(
+            "free range(mem alloc): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+            p2i(from_top), p2i(from_top) + from_free,
+            p2i(to_top), p2i(to_top) + to_free,
+            p2i(old_top), p2i(old_top) + old_free);
+        }
+      }
       if (result != nullptr) {
         return result;
       }
@@ -448,6 +497,20 @@ HeapWord* ParallelScavengeHeap::allocate_old_gen_and_record(size_t size) {
   assert_locked_or_safepoint(Heap_lock);
   HeapWord* res = old_gen()->allocate(size);
   if (res != nullptr) {
+    HeapWord* from_top = young_gen()->from_space()->top();
+    size_t from_free = young_gen()->from_space()->free_in_bytes();
+    HeapWord* to_top = young_gen()->to_space()->top();
+    size_t to_free = young_gen()->to_space()->free_in_bytes();
+    HeapWord* old_top = old_gen()->object_space()->top();
+    size_t old_free = old_gen()->free_in_bytes();
+    os::set_system_range_from_to_old_free_space(
+      from_top, from_free, to_top, to_free, old_top, old_free);
+    log_info(gc, heap)(
+      "free range(alloc old): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+      p2i(from_top), p2i(from_top) + from_free,
+      p2i(to_top), p2i(to_top) + to_free,
+      p2i(old_top), p2i(old_top) + old_free);
+
     _size_policy->tenured_allocation(size * HeapWordSize);
   }
   return res;
@@ -494,7 +557,7 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
 
   HeapWord* result = NULL;
   GCCauseSetter gccs(this, GCCause::_allocation_failure);
-  
+
   if (UseParallelFullMarkCompactGC) {
     // Policy of full heap mark compact gc:
     // First level allocation failure, Mark sweep allocate in old gen.
@@ -512,6 +575,22 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
     //   After more complete mark compact, allocate in old generation.
     if (result == NULL) {
       result = old_gen()->allocate(size);
+    }
+
+    if (result != NULL) {
+      HeapWord* from_top = young_gen()->from_space()->top();
+      size_t from_free = young_gen()->from_space()->free_in_bytes();
+      HeapWord* to_top = young_gen()->to_space()->top();
+      size_t to_free = young_gen()->to_space()->free_in_bytes();
+      HeapWord* old_top = old_gen()->object_space()->top();
+      size_t old_free = old_gen()->free_in_bytes();
+      os::set_system_range_from_to_old_free_space(
+        from_top, from_free, to_top, to_free, old_top, old_free);
+      log_info(gc, heap)(
+        "free range(fail mem alloc): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+        p2i(from_top), p2i(from_top) + from_free,
+        p2i(to_top), p2i(to_top) + to_free,
+        p2i(old_top), p2i(old_top) + old_free);
     }
   } else if (UseParallelFullScavengeGC) {
     // Policy of full heap scavenge gc:
@@ -596,8 +675,27 @@ size_t ParallelScavengeHeap::unsafe_max_tlab_alloc(Thread* thr) const {
 }
 
 HeapWord* ParallelScavengeHeap::allocate_new_tlab(size_t min_size, size_t requested_size, size_t* actual_size) {
-  HeapWord* result = !UseParallelFullMarkCompactGC ? young_gen()->allocate(requested_size)
-                                                   : old_gen()->allocate(requested_size);
+  HeapWord* result = nullptr;
+  if (!UseParallelFullMarkCompactGC) {
+    result = young_gen()->allocate(requested_size);
+  } else {
+    result = old_gen()->allocate(requested_size);
+    if (result != nullptr) {
+      HeapWord* from_top = young_gen()->from_space()->top();
+      size_t from_free = young_gen()->from_space()->free_in_bytes();
+      HeapWord* to_top = young_gen()->to_space()->top();
+      size_t to_free = young_gen()->to_space()->free_in_bytes();
+      HeapWord* old_top = old_gen()->object_space()->top();
+      size_t old_free = old_gen()->free_in_bytes();
+      os::set_system_range_from_to_old_free_space(
+        from_top, from_free, to_top, to_free, old_top, old_free);
+      log_info(gc, heap)(
+        "free range(new tlab): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+        p2i(from_top), p2i(from_top) + from_free,
+        p2i(to_top), p2i(to_top) + to_free,
+        p2i(old_top), p2i(old_top) + old_free);
+    }
+  }
   if (result != nullptr) {
     *actual_size = requested_size;
   }

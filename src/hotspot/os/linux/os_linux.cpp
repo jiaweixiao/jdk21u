@@ -1508,20 +1508,34 @@ void os::dump_thread_majflt_and_cputime() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // [gc breakdown][range majflt] profile majflt by range support
-void os::set_majflt_ranges(size_t range0_base, size_t range0_size,
-  size_t range1_base, size_t range1_size) {
-  syscall(453, range0_base, range0_size, range1_base, range1_size);
+void os::set_majflt_ranges(HeapWord* young_base, size_t young_size,
+  HeapWord* old_base, size_t old_size) {
+  syscall(453, p2i(young_base), young_size, p2i(old_base), old_size);
 }
 
 void os::reset_system_range_majflt_stats() {
   syscall(451);
 }
 
-void os::get_system_range_majflt_stats(RangeMajfltStats* stats) {
+void os::get_system_kernel_majflt_stats(KernelStats* stats) {
   syscall(452, stats);
 }
 
-inline void proc_statmajflt(const char* fname, RangeMajfltStats* stats) {
+void os::reset_system_range_free_spaces() {
+  syscall(454, 0, 0, 0, 0, 0, 0);
+}
+
+void os::set_system_range_from_to_old_free_space(
+    HeapWord* from_free_base, size_t from_free_size,
+    HeapWord* to_free_base, size_t to_free_size,
+    HeapWord* old_free_base, size_t old_free_size) {
+  syscall(454,
+          p2i(from_free_base), from_free_size,
+          p2i(to_free_base), to_free_size,
+          p2i(old_free_base), old_free_size);
+}
+
+inline void proc_statmajflt(const char* fname, KernelStats* stats) {
   // Get the majflt field from /proc/<pid>/<tid>/statmajflt
   char *s;
   char stat[2048];
@@ -1541,20 +1555,20 @@ inline void proc_statmajflt(const char* fname, RangeMajfltStats* stats) {
   while (s && isspace(*s)) { s++; };
 
   count = sscanf(s,"%lu %lu %lu %lu %lu",
-                 &(stats->majflt), &(stats->majflt_in_range0), &(stats->majflt_in_range1),
+                 &(stats->majflt), &(stats->majflt_in_young), &(stats->majflt_in_old),
                  &uldummy, &uldummy);
   if (count != 5) {
     stats->majflt = 0;
-    stats->majflt_in_range0 = 0;
-    stats->majflt_in_range1 = 0;
+    stats->majflt_in_young = 0;
+    stats->majflt_in_old = 0;
   }
 }
 
-void os::accum_proc_range_majflt(RangeMajfltStats* stats) {
+void os::accum_proc_range_majflt(KernelStats* stats) {
   proc_statmajflt("/proc/self/statmajflt", stats);
 }
 
-void os::current_thread_range_majflt(RangeMajfltStats* stats) {
+void os::current_thread_range_majflt(KernelStats* stats) {
   char proc_name[64];
   snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", Thread::current()->osthread()->thread_id());
   proc_statmajflt(proc_name, stats);
@@ -1563,14 +1577,14 @@ void os::current_thread_range_majflt(RangeMajfltStats* stats) {
 void os::dump_thread_range_majflt() {
   pid_t tid;
   char proc_name[64];
-  RangeMajfltStats stats;
+  KernelStats stats;
 
   for (JavaThreadIteratorWithHandle jtiwh; JavaThread *jt = jtiwh.next(); ) {
     tid = jt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
-      jt->name(), tid, stats.majflt, stats.majflt_in_range0, stats.majflt_in_range1);
+    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld",
+      jt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old);
   }
 
   for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
@@ -1578,8 +1592,8 @@ void os::dump_thread_range_majflt() {
     tid = njt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
-      njt->name(), tid, stats.majflt, stats.majflt_in_range0, stats.majflt_in_range1);
+    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld",
+      njt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old);
   }
 }
 

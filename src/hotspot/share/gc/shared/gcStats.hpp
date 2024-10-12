@@ -41,10 +41,10 @@ class GCStats : public CHeapObj<mtGC> {
 
 class GCMajfltStats {
   size_t             _stt_majflt;
-  // RangeMajfltStats* _stt_sys_stats;
-  // RangeMajfltStats* _end_sys_stats;
-  RangeMajfltStats* _stt_proc_stats;
-  RangeMajfltStats* _end_proc_stats;
+  KernelStats* _stt_sys_stats;
+  KernelStats* _end_sys_stats;
+  // KernelStats* _stt_proc_stats;
+  // KernelStats* _end_proc_stats;
 
 public:
   GCMajfltStats();
