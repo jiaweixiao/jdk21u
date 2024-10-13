@@ -300,7 +300,7 @@ class os: AllStatic {
   // The number of page major fault, cpu time in user and sys of current process.
   static void current_thread_majflt_and_cputime(long* majflt, long* user_time, long* sys_time);
   // Dump the number of page major fault, user and sys time of java and non-java threads.
-  static void dump_thread_majflt_and_cputime();
+  static void dump_thread_majflt_and_cputime(const char *prefix);
 
   // [gc breakdown][range majflt]
   // Range ID:

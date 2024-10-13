@@ -1472,6 +1472,40 @@ static inline void proc_majflt_and_cputime(const char* fname, long* majflt, long
   *sys_time = *sys_time * (1000 / clock_tics_per_sec);
 }
 
+static inline void proc_statmajflt(const char* fname, KernelStats* stats) {
+  // Get the majflt field from /proc/<pid>/<tid>/statmajflt
+  char *s;
+  char stat[2048];
+  int statlen;
+  int count;
+  size_t uldummy;
+  FILE *fp;
+
+  fp = os::fopen(fname, "r");
+  if (fp == nullptr) return;
+  statlen = fread(stat, 1, 2047, fp);
+  stat[statlen] = '\0';
+  fclose(fp);
+
+  s = stat;
+  // Skip blank chars
+  while (s && isspace(*s)) { s++; };
+
+  count = sscanf(s,"%lu %lu %lu %lu %lu %lu %lu",
+                 &(stats->majflt), &(stats->majflt_in_young), &(stats->majflt_in_old),
+                 &stats->thread_user_clk, &stats->thread_sys_clk,
+                 &(stats->thread_rdma_read), &(stats->thread_rdma_write));
+  if (count != 7) {
+    stats->majflt = 0;
+    stats->majflt_in_young = 0;
+    stats->majflt_in_old = 0;
+    stats->thread_user_clk = 0;
+    stats->thread_sys_clk = 0;
+    stats->thread_rdma_read = 0;
+    stats->thread_rdma_write = 0;
+  }
+}
+
 // Error will return 0
 unsigned long os::accumMajflt() {
   return proc_majflt("/proc/self/stat");
@@ -1483,26 +1517,41 @@ void os::current_thread_majflt_and_cputime(long* majflt, long* user_time, long* 
   proc_majflt_and_cputime(proc_name, majflt, user_time, sys_time);
 }
 
-void os::dump_thread_majflt_and_cputime() {
+void os::dump_thread_majflt_and_cputime(const char *prefix) {
   pid_t tid;
   char proc_name[64];
-  long majflt, user_time, sys_time;
+  // long majflt, user_time, sys_time;
+  KernelStats stats;
 
   for (JavaThreadIteratorWithHandle jtiwh; JavaThread *jt = jtiwh.next(); ) {
     tid = jt->osthread()->thread_id();
-    snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
-    proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
-      jt->name(), tid, majflt, user_time, sys_time);
+    // snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
+    // proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
+    // log_info(gc, thread)("%sJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
+    //   prefix, jt->name(), tid, majflt, user_time, sys_time);
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("%sJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms, RDMARead=%ld, RDMAWrite=%ld",
+      prefix, jt->name(), tid, stats.majflt, 
+      stats.thread_user_clk * 1000 / clock_tics_per_sec,
+      stats.thread_sys_clk * 1000 / clock_tics_per_sec,
+      stats.thread_rdma_read, stats.thread_rdma_write);
   }
 
   for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
     NonJavaThread* njt = njti.current();
     tid = njt->osthread()->thread_id();
-    snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
-    proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
-      njt->name(), tid, majflt, user_time, sys_time);
+    // snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
+    // proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
+    // log_info(gc, thread)("%sNonJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
+    //   prefix, njt->name(), tid, majflt, user_time, sys_time);
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("%sNonJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms, RDMARead=%ld, RDMAWrite=%ld",
+      prefix, njt->name(), tid, stats.majflt, 
+      stats.thread_user_clk * 1000 / clock_tics_per_sec,
+      stats.thread_sys_clk * 1000 / clock_tics_per_sec,
+      stats.thread_rdma_read, stats.thread_rdma_write);
   }
 }
 
@@ -1548,40 +1597,6 @@ void os::set_system_range_from_to_old_free_space(
           p2i(old_free_base), old_free_size);
 }
 
-inline void proc_statmajflt(const char* fname, KernelStats* stats) {
-  // Get the majflt field from /proc/<pid>/<tid>/statmajflt
-  char *s;
-  char stat[2048];
-  int statlen;
-  int count;
-  size_t uldummy;
-  FILE *fp;
-
-  fp = os::fopen(fname, "r");
-  if (fp == nullptr) return;
-  statlen = fread(stat, 1, 2047, fp);
-  stat[statlen] = '\0';
-  fclose(fp);
-
-  s = stat;
-  // Skip blank chars
-  while (s && isspace(*s)) { s++; };
-
-  count = sscanf(s,"%lu %lu %lu %lu %lu %lu %lu",
-                 &(stats->majflt), &(stats->majflt_in_young), &(stats->majflt_in_old),
-                 &stats->thread_user_clk, &stats->thread_sys_clk,
-                 &(stats->thread_rdma_read), &(stats->thread_rdma_write));
-  if (count != 7) {
-    stats->majflt = 0;
-    stats->majflt_in_young = 0;
-    stats->majflt_in_old = 0;
-    stats->thread_user_clk = 0;
-    stats->thread_sys_clk = 0;
-    stats->thread_rdma_read = 0;
-    stats->thread_rdma_write = 0;
-  }
-}
-
 void os::accum_proc_range_majflt(KernelStats* stats) {
   proc_statmajflt("/proc/self/statmajflt", stats);
 }
@@ -1601,9 +1616,10 @@ void os::dump_thread_range_majflt() {
     tid = jt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, UserCLK=%ld, SysCLK=%ld, RDMARead=%ld, RDMAWrite=%ld",
+    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, user=%ldms, sys=%ldms, RDMARead=%ld, RDMAWrite=%ld",
       jt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old,
-      stats.thread_user_clk, stats.thread_sys_clk,
+      stats.thread_user_clk * 1000 / clock_tics_per_sec,
+      stats.thread_sys_clk * 1000 / clock_tics_per_sec,
       stats.thread_rdma_read, stats.thread_rdma_write);
   }
 
@@ -1612,9 +1628,10 @@ void os::dump_thread_range_majflt() {
     tid = njt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, UserCLK=%ld, SysCLK=%ld, RDMARead=%ld, RDMAWrite=%ld",
+    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, user=%ldms, sys=%ldms, RDMARead=%ld, RDMAWrite=%ld",
       njt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old,
-      stats.thread_user_clk, stats.thread_sys_clk,
+      stats.thread_user_clk * 1000 / clock_tics_per_sec,
+      stats.thread_sys_clk * 1000 / clock_tics_per_sec,
       stats.thread_rdma_read, stats.thread_rdma_write);
   }
 }
