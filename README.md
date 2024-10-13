@@ -28,13 +28,17 @@ tracking.
 https://github.com/jiaweixiao/linux-5.11/tree/jdk-range-majflt?tab=readme-ov-file#profiling  
 ### Usage
 Support psnew, psmc and ps.  
-Enable profiling with flag `-XX:+UseProfileRegionMajflt`.
+Enable profiling with flag `-XX:+UsePSProfileKernel`.
 ### Result format
 The result is logged in gclog. 
 * `Majflt` is read from `/proc/self/stat`.  
 * `SysRegionMajflt` is system wide.  
 * `RegionMajflt` is read from `/proc/self/statmajflt` or `/proc/self/<tid>/statmajflt`.  
 * `In region` is majflt in young space, and `out region` is majflt in old space.  
+* `thread_user_clk` is read from `/proc/self/stat`.  
+* `thread_sys_clk` is read from `/proc/self/stat`.  
+* `thread_rdma_read` read sync + async.  
+* `thread_rdma_write` ondemand swapout.  
 #### On JVM init and exit
 ```text
 [0.008s][47675][info][gc     ] Majflt(init heap)=3

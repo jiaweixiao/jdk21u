@@ -726,12 +726,14 @@ void JavaThread::thread_main_inner() {
 
 // Shared teardown for all JavaThreads
 void JavaThread::post_run() {
-  // // [gc breakdown][range majflt]
-  // KernelStats proc_stats;
-  // os::current_thread_range_majflt(&proc_stats);
-  // log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld",
-  //   this->name(), Thread::current()->osthread()->thread_id(),
-  //   proc_stats.majflt, proc_stats.majflt_in_young, proc_stats.majflt_in_old);
+  // [gc breakdown][range majflt]
+  KernelStats proc_stats;
+  os::current_thread_range_majflt(&proc_stats);
+  log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, UserCLK=%ld, SysCLK=%ld, RDMARead=%ld, RDMAWrite=%ld",
+    this->name(), Thread::current()->osthread()->thread_id(),
+    proc_stats.majflt, proc_stats.majflt_in_young, proc_stats.majflt_in_old,
+    proc_stats.thread_user_clk, proc_stats.thread_sys_clk,
+    proc_stats.thread_rdma_read, proc_stats.thread_rdma_write);
   this->exit(false);
   this->unregister_thread_stack_with_NMT();
   // Defer deletion to here to ensure 'this' is still referenceable in call_run

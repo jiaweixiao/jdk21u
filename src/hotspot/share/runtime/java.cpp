@@ -450,7 +450,7 @@ void before_exit(JavaThread* thread, bool halt) {
 
 
   // Actual shutdown logic begins here.
-  // os::dump_thread_range_majflt();
+  os::dump_thread_range_majflt();
 
 #if INCLUDE_JVMCI
   if (EnableJVMCI) {

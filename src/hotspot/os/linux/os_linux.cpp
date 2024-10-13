@@ -1567,13 +1567,18 @@ inline void proc_statmajflt(const char* fname, KernelStats* stats) {
   // Skip blank chars
   while (s && isspace(*s)) { s++; };
 
-  count = sscanf(s,"%lu %lu %lu %lu %lu",
+  count = sscanf(s,"%lu %lu %lu %lu %lu %lu %lu",
                  &(stats->majflt), &(stats->majflt_in_young), &(stats->majflt_in_old),
-                 &uldummy, &uldummy);
-  if (count != 5) {
+                 &stats->thread_user_clk, &stats->thread_sys_clk,
+                 &(stats->thread_rdma_read), &(stats->thread_rdma_write));
+  if (count != 7) {
     stats->majflt = 0;
     stats->majflt_in_young = 0;
     stats->majflt_in_old = 0;
+    stats->thread_user_clk = 0;
+    stats->thread_sys_clk = 0;
+    stats->thread_rdma_read = 0;
+    stats->thread_rdma_write = 0;
   }
 }
 
@@ -1596,8 +1601,10 @@ void os::dump_thread_range_majflt() {
     tid = jt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld",
-      jt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old);
+    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, UserCLK=%ld, SysCLK=%ld, RDMARead=%ld, RDMAWrite=%ld",
+      jt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old,
+      stats.thread_user_clk, stats.thread_sys_clk,
+      stats.thread_rdma_read, stats.thread_rdma_write);
   }
 
   for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
@@ -1605,8 +1612,10 @@ void os::dump_thread_range_majflt() {
     tid = njt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld",
-      njt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old);
+    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, MajfltInYoung=%ld, MajfltInOld=%ld, UserCLK=%ld, SysCLK=%ld, RDMARead=%ld, RDMAWrite=%ld",
+      njt->name(), tid, stats.majflt, stats.majflt_in_young, stats.majflt_in_old,
+      stats.thread_user_clk, stats.thread_sys_clk,
+      stats.thread_rdma_read, stats.thread_rdma_write);
   }
 }
 

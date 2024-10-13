@@ -161,6 +161,10 @@ struct KernelStats {
   size_t swapout_out_heap;
   size_t swapout_in_heap;
   size_t swapout_in_heap_free_space;
+  size_t thread_user_clk;
+  size_t thread_sys_clk;
+  size_t thread_rdma_read;
+  size_t thread_rdma_write;
 };
 
 class os: AllStatic {
