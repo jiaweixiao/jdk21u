@@ -152,6 +152,22 @@ typedef void (*java_call_t)(JavaValue* value, const methodHandle& method, JavaCa
 
 class MallocTracker;
 
+struct KernelStats {
+  size_t majflt;
+  size_t majflt_in_young;
+  size_t majflt_in_old;
+  size_t swapin_sync;
+  size_t swapin_async;
+  size_t swapout_out_heap;
+  size_t swapout_in_heap;
+  size_t swapout_in_heap_free_space;
+  size_t user_ms;
+  size_t sys_ms;
+  size_t rdma_read;
+  size_t rdma_write;
+  size_t minflt;
+};
+
 class os: AllStatic {
   friend class VMStructs;
   friend class JVMCIVMStructs;
@@ -286,6 +302,7 @@ class os: AllStatic {
   static void get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
   // The number of page major/minor fault, cpu time in user and sys of current process.
   static void current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
+  static void current_proc_statmajflt(KernelStats *stats);
   // Dump the number of page major fault, user and sys time of current java and non-java threads.
   static void dump_current_thread_majflt_minflt_and_cputime(const char *prefix);
   // Dump the number of page major fault, user and sys time of java and non-java threads since the start of jvm.
