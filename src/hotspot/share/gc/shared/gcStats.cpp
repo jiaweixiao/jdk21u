@@ -31,47 +31,61 @@ GCStats::GCStats() : _avg_promoted(new AdaptivePaddedNoZeroDevAverage(AdaptiveSi
 
 GCMajfltStats::GCMajfltStats() : _stt_majflt(0) {
   // Allocation in thread-local resource area
-  _stt_sys_stats = NEW_RESOURCE_OBJ(KernelStats);
-  _end_sys_stats = NEW_RESOURCE_OBJ(KernelStats);
-  // _stt_proc_stats = NEW_RESOURCE_OBJ(KernelStats);
-  // _end_proc_stats = NEW_RESOURCE_OBJ(KernelStats);
+  if (UsePSProfileKernel) {
+    _stt_sys_stats = NEW_RESOURCE_OBJ(KernelStats);
+    _end_sys_stats = NEW_RESOURCE_OBJ(KernelStats);
+    // _stt_proc_stats = NEW_RESOURCE_OBJ(KernelStats);
+    // _end_proc_stats = NEW_RESOURCE_OBJ(KernelStats);
+  }
 }
 
 GCMajfltStats::~GCMajfltStats() {
-  FREE_RESOURCE_ARRAY(KernelStats, _stt_sys_stats, 1);
-  FREE_RESOURCE_ARRAY(KernelStats, _end_sys_stats, 1);
-  // FREE_RESOURCE_ARRAY(KernelStats, _stt_proc_stats, 1);
-  // FREE_RESOURCE_ARRAY(KernelStats, _end_proc_stats, 1);
+  if (UsePSProfileKernel) {
+    FREE_RESOURCE_ARRAY(KernelStats, _stt_sys_stats, 1);
+    FREE_RESOURCE_ARRAY(KernelStats, _end_sys_stats, 1);
+    // FREE_RESOURCE_ARRAY(KernelStats, _stt_proc_stats, 1);
+    // FREE_RESOURCE_ARRAY(KernelStats, _end_proc_stats, 1);
+  }
 }
 
 void GCMajfltStats::start() {
-  _stt_majflt = os::accumMajflt();
-  os::get_system_kernel_majflt_stats(_stt_sys_stats);
-  // os::accum_proc_range_majflt(_stt_proc_stats);
+  if (UsePSProfileKernel) {
+    _stt_majflt = os::accumMajflt();
+    os::get_system_kernel_majflt_stats(_stt_sys_stats);
+    // os::accum_proc_range_majflt(_stt_proc_stats);
+  }
 }
 
 void GCMajfltStats::end_and_log(const char* cause) {
-  size_t _end_majflt = os::accumMajflt();
-  log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
+  if (UsePSProfileKernel) {
+    size_t _end_majflt = os::accumMajflt();
+    log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
 
-  os::get_system_kernel_majflt_stats(_end_sys_stats);
-  log_info(gc)("SysKernelStats(%s) majflt %ld (%ld -> %ld), in young %ld (%ld -> %ld), in old %ld (%ld -> %ld), swapout in heap (%ld -> %ld), swapout in heap free (%ld -> %ld)",
-    cause,
-    _end_sys_stats->majflt - _stt_sys_stats->majflt,
-    _stt_sys_stats->majflt, _end_sys_stats->majflt,
-    _end_sys_stats->majflt_in_young - _stt_sys_stats->majflt_in_young,
-    _stt_sys_stats->majflt_in_young, _end_sys_stats->majflt_in_young,
-    _end_sys_stats->majflt_in_old - _stt_sys_stats->majflt_in_old,
-    _stt_sys_stats->majflt_in_old, _end_sys_stats->majflt_in_old,
-    _stt_sys_stats->swapout_in_heap,
-    _end_sys_stats->swapout_in_heap,
-    _stt_sys_stats->swapout_in_heap_free_space,
-    _end_sys_stats->swapout_in_heap_free_space);
+    os::get_system_kernel_majflt_stats(_end_sys_stats);
+    log_info(gc)("SysKernelStats(%s): majflt %ld (%ld -> %ld), in young %ld (%ld -> %ld), in old %ld (%ld -> %ld), swapin sync (%ld -> %ld), swapin async (%ld -> %ld), swapout out heap (%ld -> %ld), swapout in heap (%ld -> %ld), swapout in heap free (%ld -> %ld)",
+      cause,
+      _end_sys_stats->majflt - _stt_sys_stats->majflt,
+      _stt_sys_stats->majflt, _end_sys_stats->majflt,
+      _end_sys_stats->majflt_in_young - _stt_sys_stats->majflt_in_young,
+      _stt_sys_stats->majflt_in_young, _end_sys_stats->majflt_in_young,
+      _end_sys_stats->majflt_in_old - _stt_sys_stats->majflt_in_old,
+      _stt_sys_stats->majflt_in_old, _end_sys_stats->majflt_in_old,
+      _stt_sys_stats->swapin_sync,
+      _end_sys_stats->swapin_sync,
+      _stt_sys_stats->swapin_async,
+      _end_sys_stats->swapin_async,
+      _stt_sys_stats->swapout_out_heap,
+      _end_sys_stats->swapout_out_heap,
+      _stt_sys_stats->swapout_in_heap,
+      _end_sys_stats->swapout_in_heap,
+      _stt_sys_stats->swapout_in_heap_free_space,
+      _end_sys_stats->swapout_in_heap_free_space);
 
-  // os::accum_proc_range_majflt(_end_proc_stats);
-  // log_info(gc)("RegionMajflt(%s) majflt %ld (%ld -> %ld), in young %ld (%ld -> %ld), in old %ld (%ld -> %ld)",
-  //   cause,
-  //   _end_proc_stats->majflt - _stt_proc_stats->majflt , _stt_proc_stats->majflt, _end_proc_stats->majflt,
-  //   _end_proc_stats->majflt_in_young - _stt_proc_stats->majflt_in_young , _stt_proc_stats->majflt_in_young, _end_proc_stats->majflt_in_young,
-  //   _end_proc_stats->majflt_in_old - _stt_proc_stats->majflt_in_old , _stt_proc_stats->majflt_in_old, _end_proc_stats->majflt_in_old);
+    // os::accum_proc_range_majflt(_end_proc_stats);
+    // log_info(gc)("RegionMajflt(%s) majflt %ld (%ld -> %ld), in young %ld (%ld -> %ld), in old %ld (%ld -> %ld)",
+    //   cause,
+    //   _end_proc_stats->majflt - _stt_proc_stats->majflt , _stt_proc_stats->majflt, _end_proc_stats->majflt,
+    //   _end_proc_stats->majflt_in_young - _stt_proc_stats->majflt_in_young , _stt_proc_stats->majflt_in_young, _end_proc_stats->majflt_in_young,
+    //   _end_proc_stats->majflt_in_old - _stt_proc_stats->majflt_in_old , _stt_proc_stats->majflt_in_old, _end_proc_stats->majflt_in_old);
+  }
 }

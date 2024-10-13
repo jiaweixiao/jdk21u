@@ -156,6 +156,9 @@ struct KernelStats {
   size_t majflt;
   size_t majflt_in_young;
   size_t majflt_in_old;
+  size_t swapin_sync;
+  size_t swapin_async;
+  size_t swapout_out_heap;
   size_t swapout_in_heap;
   size_t swapout_in_heap_free_space;
 };
@@ -303,6 +306,7 @@ class os: AllStatic {
                                 HeapWord* old_base, size_t old_size);
   static void reset_system_range_majflt_stats();
   static void get_system_kernel_majflt_stats(KernelStats* stats);
+  static void dump_system_kernel_majflt_stats(const char* cause);
   static void accum_proc_range_majflt(KernelStats* stats);
   static void current_thread_range_majflt(KernelStats* stats);
   static void dump_thread_range_majflt();

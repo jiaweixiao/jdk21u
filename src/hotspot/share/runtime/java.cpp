@@ -485,17 +485,14 @@ void before_exit(JavaThread* thread, bool halt) {
   Universe::heap()->stop();
 
   // [gc breakdown][range majflt]
-  log_info(gc)("Majflt(exit jvm)=%ld", os::accumMajflt());
-
-  KernelStats sys_stats, proc_stats;
-  os::get_system_kernel_majflt_stats(&sys_stats);
-  log_info(gc)(
-    "SysKernelStats(exit jvm) majflt %ld, in young %ld, in old %ld, swapout in heap %ld, swapout in heap free %ld)",
-    sys_stats.majflt, sys_stats.majflt_in_young, sys_stats.majflt_in_old,
-    sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free_space);
-  // os::accum_proc_range_majflt(&proc_stats);
-  // log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in young %ld, in old %ld",
-  //   proc_stats.majflt, proc_stats.majflt_in_young, proc_stats.majflt_in_old);
+  if (UsePSProfileKernel) {
+    log_info(gc)("Majflt(exit jvm)=%ld", os::accumMajflt());
+    os::dump_system_kernel_majflt_stats("exit jvm");
+    // KernelStats proc_stats;
+    // os::accum_proc_range_majflt(&proc_stats);
+    // log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in young %ld, in old %ld",
+    //   proc_stats.majflt, proc_stats.majflt_in_young, proc_stats.majflt_in_old);
+  }
 
   // Print GC/heap related information.
   Log(gc, heap, exit) log;

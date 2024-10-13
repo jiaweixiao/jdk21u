@@ -1521,6 +1521,19 @@ void os::get_system_kernel_majflt_stats(KernelStats* stats) {
   syscall(452, stats);
 }
 
+void os::dump_system_kernel_majflt_stats(const char* cause) {
+  KernelStats stats;
+  syscall(452, &stats);
+
+  log_info(gc)(
+    "SysKernelStats(%s) majflt %ld, in young %ld, in old %ld, swapin sync %ld, swapin async %ld, swapout out heap %ld, swapout in heap %ld, swapout in heap free %ld",
+    cause,
+    stats.majflt, stats.majflt_in_young, stats.majflt_in_old,
+    stats.swapin_sync, stats.swapin_async,
+    stats.swapout_out_heap,
+    stats.swapout_in_heap, stats.swapout_in_heap_free_space);
+}
+
 void os::reset_system_range_free_spaces() {
   syscall(454, 0, 0, 0, 0, 0, 0);
 }

@@ -133,30 +133,32 @@ jint ParallelScavengeHeap::initialize() {
   // the resize policy result will be clamped in reserved space.
   // Thus we init the bitmap at startup and can use it until JVM exits.
   //
-  // Init majflt region bitmap
-  HeapWord* young_base = young_gen()->reserved().start();
-  size_t young_size = young_gen()->reserved().byte_size();
-  HeapWord* old_base = old_gen()->reserved().start();
-  size_t old_size = old_gen()->reserved().byte_size();
-  os::set_majflt_ranges(young_base, young_size, old_base, old_size);
-  log_info(gc, init)("range 0 [" PTR_FORMAT ", " PTR_FORMAT "]"
-                      "range 1 [" PTR_FORMAT ", " PTR_FORMAT "]",
-                      p2i(young_base), p2i(young_base) + young_size,
-                      p2i(old_base), p2i(old_base) + old_size);
-  // Set free range
-  HeapWord* from_top = young_gen()->from_space()->top();
-  size_t from_free = young_gen()->from_space()->free_in_bytes();
-  HeapWord* to_top = young_gen()->to_space()->top();
-  size_t to_free = young_gen()->to_space()->free_in_bytes();
-  HeapWord* old_top = old_gen()->object_space()->top();
-  size_t old_free = old_gen()->free_in_bytes();
-  os::set_system_range_from_to_old_free_space(
-    from_top, from_free, to_top, to_free, old_top, old_free);
-  log_info(gc, heap)(
-    "free range(init heap): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
-    p2i(from_top), p2i(from_top) + from_free,
-    p2i(to_top), p2i(to_top) + to_free,
-    p2i(old_top), p2i(old_top) + old_free);
+  if (UsePSProfileKernel){
+    // Init majflt region bitmap
+    HeapWord* young_base = young_gen()->reserved().start();
+    size_t young_size = young_gen()->reserved().byte_size();
+    HeapWord* old_base = old_gen()->reserved().start();
+    size_t old_size = old_gen()->reserved().byte_size();
+    os::set_majflt_ranges(young_base, young_size, old_base, old_size);
+    log_info(gc, init)("range 0 [" PTR_FORMAT ", " PTR_FORMAT "]"
+                        "range 1 [" PTR_FORMAT ", " PTR_FORMAT "]",
+                        p2i(young_base), p2i(young_base) + young_size,
+                        p2i(old_base), p2i(old_base) + old_size);
+    // Set free range
+    HeapWord* from_top = young_gen()->from_space()->top();
+    size_t from_free = young_gen()->from_space()->free_in_bytes();
+    HeapWord* to_top = young_gen()->to_space()->top();
+    size_t to_free = young_gen()->to_space()->free_in_bytes();
+    HeapWord* old_top = old_gen()->object_space()->top();
+    size_t old_free = old_gen()->free_in_bytes();
+    os::set_system_range_from_to_old_free_space(
+      from_top, from_free, to_top, to_free, old_top, old_free);
+    log_info(gc, heap)(
+      "free range(init heap): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+      p2i(from_top), p2i(from_top) + from_free,
+      p2i(to_top), p2i(to_top) + to_free,
+      p2i(old_top), p2i(old_top) + old_free);
+  }
 
   ParallelInitLogger::print();
 
@@ -321,7 +323,7 @@ HeapWord* ParallelScavengeHeap::mem_allocate(
     result = young_gen()->allocate(size);
   } else {
     result = old_gen()->allocate(size);
-    if (result != nullptr) {
+    if (UsePSProfileKernel && result != nullptr) {
       HeapWord* from_top = young_gen()->from_space()->top();
       size_t from_free = young_gen()->from_space()->free_in_bytes();
       HeapWord* to_top = young_gen()->to_space()->top();
@@ -362,7 +364,7 @@ HeapWord* ParallelScavengeHeap::mem_allocate(
         result = young_gen()->allocate(size);
       } else {
         result = old_gen()->allocate(size);
-        if (result != nullptr) {
+        if (UsePSProfileKernel && result != nullptr) {
           HeapWord* from_top = young_gen()->from_space()->top();
           size_t from_free = young_gen()->from_space()->free_in_bytes();
           HeapWord* to_top = young_gen()->to_space()->top();
@@ -497,20 +499,21 @@ HeapWord* ParallelScavengeHeap::allocate_old_gen_and_record(size_t size) {
   assert_locked_or_safepoint(Heap_lock);
   HeapWord* res = old_gen()->allocate(size);
   if (res != nullptr) {
-    HeapWord* from_top = young_gen()->from_space()->top();
-    size_t from_free = young_gen()->from_space()->free_in_bytes();
-    HeapWord* to_top = young_gen()->to_space()->top();
-    size_t to_free = young_gen()->to_space()->free_in_bytes();
-    HeapWord* old_top = old_gen()->object_space()->top();
-    size_t old_free = old_gen()->free_in_bytes();
-    os::set_system_range_from_to_old_free_space(
-      from_top, from_free, to_top, to_free, old_top, old_free);
-    log_info(gc, heap)(
-      "free range(alloc old): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
-      p2i(from_top), p2i(from_top) + from_free,
-      p2i(to_top), p2i(to_top) + to_free,
-      p2i(old_top), p2i(old_top) + old_free);
-
+    if (UsePSProfileKernel) {
+      HeapWord* from_top = young_gen()->from_space()->top();
+      size_t from_free = young_gen()->from_space()->free_in_bytes();
+      HeapWord* to_top = young_gen()->to_space()->top();
+      size_t to_free = young_gen()->to_space()->free_in_bytes();
+      HeapWord* old_top = old_gen()->object_space()->top();
+      size_t old_free = old_gen()->free_in_bytes();
+      os::set_system_range_from_to_old_free_space(
+        from_top, from_free, to_top, to_free, old_top, old_free);
+      log_info(gc, heap)(
+        "free range(alloc old): from [" PTR_FORMAT "-" PTR_FORMAT "], to [" PTR_FORMAT "-" PTR_FORMAT "], old [" PTR_FORMAT "-" PTR_FORMAT "]",
+        p2i(from_top), p2i(from_top) + from_free,
+        p2i(to_top), p2i(to_top) + to_free,
+        p2i(old_top), p2i(old_top) + old_free);
+    }
     _size_policy->tenured_allocation(size * HeapWordSize);
   }
   return res;
@@ -577,7 +580,7 @@ HeapWord* ParallelScavengeHeap::failed_mem_allocate(size_t size) {
       result = old_gen()->allocate(size);
     }
 
-    if (result != NULL) {
+    if (UsePSProfileKernel && result != NULL) {
       HeapWord* from_top = young_gen()->from_space()->top();
       size_t from_free = young_gen()->from_space()->free_in_bytes();
       HeapWord* to_top = young_gen()->to_space()->top();
@@ -680,7 +683,7 @@ HeapWord* ParallelScavengeHeap::allocate_new_tlab(size_t min_size, size_t reques
     result = young_gen()->allocate(requested_size);
   } else {
     result = old_gen()->allocate(requested_size);
-    if (result != nullptr) {
+    if (UsePSProfileKernel && result != nullptr) {
       HeapWord* from_top = young_gen()->from_space()->top();
       size_t from_free = young_gen()->from_space()->free_in_bytes();
       HeapWord* to_top = young_gen()->to_space()->top();

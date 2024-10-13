@@ -120,6 +120,9 @@
   product(bool, UseParallelGC, false,                                       \
           "Use the Parallel garbage collector.")                            \
                                                                             \
+  product(bool, UsePSProfileKernel, false,                                  \
+          "Use the Parallel garbage collector.")                            \
+                                                                            \
   product(bool, UseParallelFullScavengeGC, false,                           \
           "Use the Parallel full heap scavenge garbage collector. "         \
           "It will disable old gen of PS gc.")                              \
