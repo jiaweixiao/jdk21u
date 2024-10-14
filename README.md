@@ -31,7 +31,7 @@ Support psnew, psmc, ps and g1 gc.
 Enable profiling with flag `-XX:+UseProfileRegionMajflt`.
 ### Result format
 The result is logged in gclog. 
-* `Majflt` is read from `/proc/self/stat`.  
+* `Majflt`, `minflt`, `user_ms`, `sys_ms` is read from `/proc/self/statmajflt`.  
 * `SysRegionMajflt` is system wide.  
 * `RegionMajflt` is read from `/proc/self/statmajflt` or `/proc/self/<tid>/statmajflt`.  
 * `In region` is majflt in old space, and `out region` is majflt in young space.  
