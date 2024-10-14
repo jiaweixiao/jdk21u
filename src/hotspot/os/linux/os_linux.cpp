@@ -1432,7 +1432,47 @@ static inline unsigned long proc_majflt(const char* fname) {
   }
 }
 
-static inline void proc_majflt_and_cputime(const char* fname, long* majflt, long* user_time, long* sys_time) {
+// Return 0 on error
+static inline int proc_majflt_and_minflt(const char* fname, long* majflt, long* minflt) {
+  // Get the majflt field from /proc/<pid>/<tid>/stat
+  char *s;
+  char stat[2048];
+  int statlen;
+  int count;
+  char cdummy;
+  int idummy;
+  long ldummy;
+  FILE *fp;
+
+  fp = os::fopen(fname, "r");
+  if (fp == nullptr) return 0ul;
+  statlen = fread(stat, 1, 2047, fp);
+  stat[statlen] = '\0';
+  fclose(fp);
+
+  // Skip pid and the command string. Note that we could be dealing with
+  // weird command names, e.g. user could decide to rename java launcher
+  // to "java 1.4.2 :)", then the stat file would look like
+  //                1234 (java 1.4.2 :)) R ... ...
+  // We don't really need to know the command string, just find the last
+  // occurrence of ")" and then start parsing from there. See bug 4726580.
+  s = strrchr(stat, ')');
+  if (s == nullptr) return 0ul;
+
+  // Skip blank chars
+  do { s++; } while (s && isspace(*s));
+
+  count = sscanf(s,"%c %d %d %d %d %d %lu %lu %lu %lu",
+                 &cdummy, &idummy, &idummy, &idummy, &idummy, &idummy,
+                 &ldummy, minflt, &ldummy, majflt);
+  if (count == 10) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+static inline void proc_majflt_minflt_and_cputime(const char* fname, long* majflt, long* minflt, long* user_time, long* sys_time) {
   // Get the majflt, user and sys time field from /proc/<pid>/<tid>/stat
   char *s;
   char stat[2048];
@@ -1465,45 +1505,129 @@ static inline void proc_majflt_and_cputime(const char* fname, long* majflt, long
 
   count = sscanf(s,"%c %d %d %d %d %d %lu %lu %lu %lu %lu %lu %lu",
                  &cdummy, &idummy, &idummy, &idummy, &idummy, &idummy,
-                 &ldummy, &ldummy, &ldummy, majflt, &ldummy,
+                 &ldummy, minflt, &ldummy, majflt, &ldummy,
                  user_time, sys_time);
   if (count != 15 - 2) return ;
   *user_time = *user_time * (1000 / clock_tics_per_sec);
   *sys_time = *sys_time * (1000 / clock_tics_per_sec);
 }
 
+
+inline void proc_statmajflt(const char* fname, RegionMajfltStats* stats) {
+  // Get the majflt field from /proc/<pid>/<tid>/statmajflt
+  char *s;
+  char stat[2048];
+  int statlen;
+  int count;
+  size_t uldummy;
+  FILE *fp;
+
+  fp = os::fopen(fname, "r");
+  if (fp == nullptr) return;
+  statlen = fread(stat, 1, 2047, fp);
+  stat[statlen] = '\0';
+  fclose(fp);
+
+  s = stat;
+  // Skip blank chars
+  while (s && isspace(*s)) { s++; };
+
+  // majflt maj_in_region maj_out_region user_clk sys_clk minflt
+  count = sscanf(s,"%lu %lu %lu %lu %lu %lu",
+                 &(stats->majflt), &(stats->majflt_in_region), &(stats->majflt_out_region),
+                 &(stats->user_ms), &(stats->sys_ms),
+                 &(stats->minflt));
+  if (count != 6) {
+    stats->majflt = 0;
+    stats->majflt_in_region = 0;
+    stats->majflt_out_region = 0;
+    stats->user_ms = 0;
+    stats->sys_ms = 0;
+    stats->minflt = 0;
+  }
+  stats->minflt *= (1000 / clock_tics_per_sec);
+  stats->minflt *= (1000 / clock_tics_per_sec);
+}
+
 // Error will return 0
-unsigned long os::accumMajflt() {
-  return proc_majflt("/proc/self/stat");
+void os::get_accum_majflt_minflt(long* majflt, long* minflt) {
+  RegionMajfltStats stats;
+  proc_statmajflt("/proc/self/statmajflt", &stats);
+  *majflt = stats.majflt;
+  *minflt = stats.minflt;
 }
 
-void os::current_thread_majflt_and_cputime(long* majflt, long* user_time, long* sys_time) {
+void os::get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time) {
+  RegionMajfltStats stats;
+  proc_statmajflt("/proc/self/statmajflt", &stats);
+  *majflt = stats.majflt;
+  *minflt = stats.minflt;
+  *user_time = stats.user_ms;
+  *sys_time = stats.sys_ms;
+}
+
+void os::current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time) {
   char proc_name[64];
-  snprintf(proc_name, 64, "/proc/self/task/%d/stat", Thread::current()->osthread()->thread_id());
-  proc_majflt_and_cputime(proc_name, majflt, user_time, sys_time);
+  RegionMajfltStats stats;
+  snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", Thread::current()->osthread()->thread_id());
+  proc_statmajflt(proc_name, &stats);
+  *majflt = stats.majflt;
+  *minflt = stats.minflt;
+  *user_time = stats.user_ms;
+  *sys_time = stats.sys_ms;
 }
 
-void os::dump_thread_majflt_and_cputime() {
+void os::dump_current_thread_majflt_minflt_and_cputime(const char *prefix) {
   pid_t tid;
   char proc_name[64];
-  long majflt, user_time, sys_time;
+  RegionMajfltStats stats;
 
   for (JavaThreadIteratorWithHandle jtiwh; JavaThread *jt = jtiwh.next(); ) {
     tid = jt->osthread()->thread_id();
-    snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
-    proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
-      jt->name(), tid, majflt, user_time, sys_time);
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("%sJavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
+      prefix, jt->name(), tid, stats.majflt, stats.minflt, stats.user_ms, stats.sys_ms);
   }
 
   for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
     NonJavaThread* njt = njti.current();
     tid = njt->osthread()->thread_id();
-    snprintf(proc_name, 64, "/proc/self/task/%d/stat", tid);
-    proc_majflt_and_cputime(proc_name, &majflt, &user_time, &sys_time);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
-      njt->name(), tid, majflt, user_time, sys_time);
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    log_info(gc, thread)("%sNonJavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
+      prefix, njt->name(), tid, stats.majflt, stats.minflt, stats.user_ms, stats.sys_ms);
   }
+}
+
+void os::dump_accum_thread_majflt_minflt_and_cputime(const char *prefix) {
+  pid_t tid;
+  char proc_name[64];
+  long njt_majflt, njt_minflt, njt_user_time, njt_sys_time;
+  RegionMajfltStats stats, proc_stats;
+
+  // Get non-jthread stats
+  njt_majflt = njt_minflt = njt_user_time = njt_sys_time = 0;
+  for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
+    NonJavaThread* njt = njti.current();
+    tid = njt->osthread()->thread_id();
+    snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
+    proc_statmajflt(proc_name, &stats);
+    njt_majflt += stats.majflt;
+    njt_minflt += stats.minflt;
+    njt_user_time += stats.user_ms;
+    njt_sys_time += stats.sys_ms;
+  }
+
+  // Get process stats
+  proc_statmajflt("/proc/self/statmajflt", &proc_stats);
+
+  // Get jthread stats by process - non-jthread since some mutator thread
+  // may create or exit.
+  log_info(gc)("%s JavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms), NonJavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms)",
+    prefix,
+    proc_stats.majflt-njt_majflt, proc_stats.minflt-njt_minflt, proc_stats.user_ms-njt_user_time, proc_stats.sys_ms-njt_sys_time,
+    njt_majflt, njt_minflt, njt_user_time, njt_sys_time);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1555,35 +1679,6 @@ void os::reset_system_region_majflt_stats() {
 
 void os::get_system_region_majflt_stats(RegionMajfltStats* stats) {
   syscall(452, stats);
-}
-
-inline void proc_statmajflt(const char* fname, RegionMajfltStats* stats) {
-  // Get the majflt field from /proc/<pid>/<tid>/statmajflt
-  char *s;
-  char stat[2048];
-  int statlen;
-  int count;
-  size_t uldummy;
-  FILE *fp;
-
-  fp = os::fopen(fname, "r");
-  if (fp == nullptr) return;
-  statlen = fread(stat, 1, 2047, fp);
-  stat[statlen] = '\0';
-  fclose(fp);
-
-  s = stat;
-  // Skip blank chars
-  while (s && isspace(*s)) { s++; };
-
-  count = sscanf(s,"%lu %lu %lu %lu %lu",
-                 &(stats->majflt), &(stats->majflt_in_region), &(stats->majflt_out_region),
-                 &uldummy, &uldummy);
-  if (count != 5) {
-    stats->majflt = 0;
-    stats->majflt_in_region = 0;
-    stats->majflt_out_region = 0;
-  }
 }
 
 void os::accum_proc_region_majflt(RegionMajfltStats* stats) {

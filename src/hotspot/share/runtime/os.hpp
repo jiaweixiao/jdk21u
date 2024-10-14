@@ -156,6 +156,9 @@ struct RegionMajfltStats {
   size_t majflt;
   size_t majflt_in_region;
   size_t majflt_out_region;
+  size_t minflt;
+  size_t user_ms;
+  size_t sys_ms;
 };
 
 class os: AllStatic {
@@ -286,12 +289,16 @@ class os: AllStatic {
   static double elapsedVTime();
 
   // [gc breakdown]
-  // Return the number of page major fault of the process.
-  static unsigned long accumMajflt();
-  // The number of page major fault, cpu time in user and sys of current process.
-  static void current_thread_majflt_and_cputime(long* majflt, long* user_time, long* sys_time);
-  // Dump the number of page major fault, user and sys time of java and non-java threads.
-  static void dump_thread_majflt_and_cputime();
+  // Return the number of page major/minor fault of the process.
+  static void get_accum_majflt_minflt(long* majflt, long* minflt);
+  // The number of page major/minor fault, cpu time in user and sys of jvm process.
+  static void get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
+  // The number of page major/minor fault, cpu time in user and sys of current process.
+  static void current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
+  // Dump the number of page major fault, user and sys time of current java and non-java threads.
+  static void dump_current_thread_majflt_minflt_and_cputime(const char *prefix);
+  // Dump the number of page major fault, user and sys time of java and non-java threads since the start of jvm.
+  static void dump_accum_thread_majflt_minflt_and_cputime(const char *prefix);
 
   // [gc breakdown][region majflt]
   static void init_majflt_region_bitmap(size_t base, size_t region_number, size_t region_size);

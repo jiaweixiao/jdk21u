@@ -444,16 +444,25 @@ public:
 void XDriver::gc(const XDriverRequest& request) {
   XDriverGCScope scope(request);
 
+  // [gc breakdown]
+  os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
+  GCMajfltStats gc_majflt_stats;
+
   // Phase 1: Pause Mark Start
+  gc_majflt_stats.start();
   pause_mark_start();
+  gc_majflt_stats.end_and_log("pause mark start");
 
   // Phase 2: Concurrent Mark
   concurrent(mark);
 
   // Phase 3: Pause Mark End
+  gc_majflt_stats.start();
   while (!pause_mark_end()) {
+    gc_majflt_stats.end_and_log("pause mark end");
     // Phase 3.5: Concurrent Mark Continue
     concurrent(mark_continue);
+    gc_majflt_stats.start();
   }
 
   // Phase 4: Concurrent Mark Free
@@ -466,16 +475,22 @@ void XDriver::gc(const XDriverRequest& request) {
   concurrent(reset_relocation_set);
 
   // Phase 7: Pause Verify
+  gc_majflt_stats.start();
   pause_verify();
+  gc_majflt_stats.end_and_log("pause verify");
 
   // Phase 8: Concurrent Select Relocation Set
   concurrent(select_relocation_set);
 
   // Phase 9: Pause Relocate Start
+  gc_majflt_stats.start();
   pause_relocate_start();
+  gc_majflt_stats.end_and_log("pause relocate start");
 
   // Phase 10: Concurrent Relocate
   concurrent(relocate);
+
+  os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
 }
 
 void XDriver::run_service() {

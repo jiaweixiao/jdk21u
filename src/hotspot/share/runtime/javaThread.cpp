@@ -726,13 +726,22 @@ void JavaThread::thread_main_inner() {
 
 // Shared teardown for all JavaThreads
 void JavaThread::post_run() {
+  // [gc breakdown]
+  long majflt, minflt, user_time, sys_time;
+  os::current_thread_majflt_minflt_and_cputime(&majflt, &minflt, &user_time, &sys_time);
+
   // [gc breakdown][region majflt]
   if (UseProfileRegionMajflt) {
     RegionMajfltStats proc_stats;
     os::current_thread_region_majflt(&proc_stats);
-    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, MajfltInRegion=%ld, MajfltOutRegion=%ld",
+    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, MajfltInRegion=%ld, MajfltOutRegion=%ld",
       this->name(), Thread::current()->osthread()->thread_id(),
-      proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+      majflt, minflt, user_time, sys_time,
+      proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+  } else {
+    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
+      this->name(), Thread::current()->osthread()->thread_id(),
+      majflt, minflt, user_time, sys_time);
   }
   this->exit(false);
   this->unregister_thread_stack_with_NMT();

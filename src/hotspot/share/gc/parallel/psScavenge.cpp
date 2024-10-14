@@ -668,6 +668,12 @@ bool PSScavenge::invoke_no_policy() {
   heap->print_heap_after_gc();
   heap->trace_heap_after_gc(&_gc_tracer);
 
+  if (UseParallelFullScavengeGC) {
+    // Update heap occupancy information which is used as input to the soft ref
+    // clearing policy at the next gc.
+    heap->update_capacity_and_used_at_gc();
+  }
+
   AdaptiveSizePolicyOutput::print(size_policy, heap->total_collections());
 
   _gc_timer.register_gc_end();

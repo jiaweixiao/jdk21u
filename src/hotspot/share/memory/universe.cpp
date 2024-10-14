@@ -838,16 +838,24 @@ jint universe_init() {
 jint Universe::initialize_heap() {
   assert(_collectedHeap == nullptr, "Heap already created");
 
+  // [gc breakdown]
+  long majflt, minflt;
+  os::get_accum_majflt_minflt(&majflt, &minflt);
+  log_info(gc)("Majflt(init heap)=%ld", majflt);
+  log_info(gc)("Minflt(init heap)=%ld", minflt);
+  os::dump_accum_thread_majflt_minflt_and_cputime("Init heap");
+
   // [gc breakdown][region majflt]
   if (UseProfileRegionMajflt) {
-    log_info(gc)("Majflt(init heap)=%ld", os::accumMajflt());
     os::reset_system_region_majflt_stats();
 
-    RegionMajfltStats sys_stats, proc_stats;
+    // RegionMajfltStats sys_stats;
     // os::get_system_region_majflt_stats(&sys_stats);
-    os::accum_proc_region_majflt(&proc_stats);
     // log_info(gc)("SysRegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
     //   sys_stats.majflt, sys_stats.majflt_in_region, sys_stats.majflt_out_region);
+
+    RegionMajfltStats proc_stats;
+    os::accum_proc_region_majflt(&proc_stats);
     log_info(gc)("RegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
       proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
   }

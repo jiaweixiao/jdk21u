@@ -135,7 +135,7 @@ jint ParallelScavengeHeap::initialize() {
   // 
   if (UseProfileRegionMajflt) {
     // Init majflt region bitmap
-    size_t base = (uintptr_t)(old_gen()->reserved().start());
+    size_t base = p2i(old_gen()->reserved().start());
     size_t max_old_gen_size = old_gen()->reserved().byte_size();
     size_t max_young_gen_size = young_gen()->reserved().byte_size();
     size_t gcd_region_size = gcd(max_young_gen_size, max_old_gen_size);
