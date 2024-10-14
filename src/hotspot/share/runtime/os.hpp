@@ -300,6 +300,7 @@ class os: AllStatic {
   static void get_accum_majflt_minflt(long* majflt, long* minflt);
   // The number of page major/minor fault, cpu time in user and sys of jvm process.
   static void get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
+  static void get_accum_proc_statmajflt(KernelStats *stats);
   // The number of page major/minor fault, cpu time in user and sys of current process.
   static void current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time);
   static void current_proc_statmajflt(KernelStats *stats);

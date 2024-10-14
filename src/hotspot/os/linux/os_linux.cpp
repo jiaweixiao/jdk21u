@@ -1565,6 +1565,10 @@ void os::get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* u
   proc_majflt_minflt_and_cputime("/proc/self/stat", majflt, minflt, user_time, sys_time);
 }
 
+void os::get_accum_proc_statmajflt(KernelStats *stats) {
+  proc_statmajflt("/proc/self/statmajflt", stats);
+}
+
 void os::current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time) {
   char proc_name[64];
   snprintf(proc_name, 64, "/proc/self/task/%d/stat", Thread::current()->osthread()->thread_id());
@@ -1608,7 +1612,7 @@ void os::dump_current_thread_majflt_minflt_and_cputime(const char *prefix) {
   // }
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("%sJavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld",
+    log_info(gc, thread)("%sNonJavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld",
       prefix, njt->name(), tid,
       stats.majflt, stats.minflt,
       stats.user_ms, stats.sys_ms,
@@ -1657,7 +1661,7 @@ void os::dump_accum_thread_majflt_minflt_and_cputime(const char *prefix) {
   //   prefix,
   //   proc_majflt-njt_majflt, proc_minflt-njt_minflt, proc_user_time-njt_user_time, proc_sys_time-njt_sys_time,
   //   njt_majflt, njt_minflt, njt_user_time, njt_sys_time);
-  log_info(gc)("%s JavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld), NonJavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld",
+  log_info(gc)("%s JavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld), NonJavaThread(Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, rdmar=%ld, rdmaw=%ld)",
     prefix,
     proc_stats.majflt-njt_stats.majflt, proc_stats.minflt-njt_stats.minflt,
     proc_stats.user_ms-njt_stats.user_ms, proc_stats.sys_ms-njt_stats.sys_ms,

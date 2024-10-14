@@ -29,20 +29,33 @@
 
 GCStats::GCStats() : _avg_promoted(new AdaptivePaddedNoZeroDevAverage(AdaptiveSizePolicyWeight, PromotedPadding)) {}
 
-GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0), _stt_sys_ms(0) {
+GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0), _stt_sys_ms(0), _stt_rdmar(0), _stt_rdmaw(0) {
 }
 
 GCMajfltStats::~GCMajfltStats() {
 }
 
 void GCMajfltStats::start() {
-  os::get_accum_majflt_minflt_and_cputime(&_stt_majflt, &_stt_minflt, &_stt_user_ms, &_stt_sys_ms);
+  // os::get_accum_majflt_minflt_and_cputime(&_stt_majflt, &_stt_minflt, &_stt_user_ms, &_stt_sys_ms);
+  KernelStats stats;
+  os::get_accum_proc_statmajflt(&stats);
+  _stt_majflt = stats.majflt;
+  _stt_minflt = stats.minflt;
+  _stt_user_ms = stats.user_ms;
+  _stt_sys_ms = stats.sys_ms;
+  _stt_rdmar = stats.rdma_read;
+  _stt_rdmaw = stats.rdma_write;
 }
 
 void GCMajfltStats::end_and_log(const char* cause) {
-  long _end_majflt, _end_minflt, _end_user_ms, _end_sys_ms;
-  os::get_accum_majflt_minflt_and_cputime(&_end_majflt, &_end_minflt, &_end_user_ms, &_end_sys_ms);
-  log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
-  log_info(gc)("Minflt(%s)=%ld (%ld -> %ld)", cause, _end_minflt - _stt_minflt , _stt_minflt, _end_minflt);
-  log_info(gc)("PausePhase cputime(%s): user %ldms, sys %ldms", cause, _end_user_ms - _stt_user_ms, _end_sys_ms - _stt_sys_ms);
+  // long _end_majflt, _end_minflt, _end_user_ms, _end_sys_ms;
+  // os::get_accum_majflt_minflt_and_cputime(&_end_majflt, &_end_minflt, &_end_user_ms, &_end_sys_ms);
+  // log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, _end_majflt - _stt_majflt , _stt_majflt, _end_majflt);
+  // log_info(gc)("Minflt(%s)=%ld (%ld -> %ld)", cause, _end_minflt - _stt_minflt , _stt_minflt, _end_minflt);
+  // log_info(gc)("PausePhase cputime(%s): user %ldms, sys %ldms", cause, _end_user_ms - _stt_user_ms, _end_sys_ms - _stt_sys_ms);
+  KernelStats end_stats;
+  os::get_accum_proc_statmajflt(&end_stats);
+  log_info(gc)("Majflt(%s)=%ld (%ld -> %ld)", cause, end_stats.majflt - _stt_majflt , _stt_majflt, end_stats.majflt);
+  log_info(gc)("Minflt(%s)=%ld (%ld -> %ld)", cause, end_stats.minflt - _stt_minflt , _stt_minflt, end_stats.minflt);
+  log_info(gc)("PausePhase cputime(%s): user %ldms, sys %ldms, rdmar %ld, rdmaw %ld", cause, end_stats.user_ms - _stt_user_ms, end_stats.sys_ms - _stt_sys_ms, end_stats.rdma_read - _stt_rdmar, end_stats.rdma_write - _stt_rdmaw);
 }

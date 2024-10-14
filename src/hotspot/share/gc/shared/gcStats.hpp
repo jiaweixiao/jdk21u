@@ -45,6 +45,8 @@ class GCMajfltStats {
   long _stt_minflt;
   long _stt_user_ms;
   long _stt_sys_ms;
+  long _stt_rdmar;
+  long _stt_rdmaw;
 
 public:
   GCMajfltStats();
