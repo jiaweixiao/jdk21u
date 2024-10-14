@@ -849,15 +849,15 @@ jint Universe::initialize_heap() {
   if (UseProfileRegionMajflt) {
     os::reset_system_region_majflt_stats();
 
-    // RegionMajfltStats sys_stats;
-    // os::get_system_region_majflt_stats(&sys_stats);
-    // log_info(gc)("SysRegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
-    //   sys_stats.majflt, sys_stats.majflt_in_region, sys_stats.majflt_out_region);
+    RegionMajfltStats sys_stats;
+    os::get_system_region_majflt_stats(&sys_stats);
+    log_info(gc)("SwapoutGarbage(init heap) in heap %ld, in heap free %ld",
+      sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free);
 
-    RegionMajfltStats proc_stats;
-    os::accum_proc_region_majflt(&proc_stats);
-    log_info(gc)("RegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
-      proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+    // RegionMajfltStats proc_stats;
+    // os::accum_proc_region_majflt(&proc_stats);
+    // log_info(gc)("RegionMajflt(init heap) majflt %ld, in region %ld, out region %ld",
+    //   proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
   }
 
   _collectedHeap = GCConfig::arguments()->create_heap();

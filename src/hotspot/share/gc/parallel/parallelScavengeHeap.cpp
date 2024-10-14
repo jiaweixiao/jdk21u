@@ -127,30 +127,30 @@ jint ParallelScavengeHeap::initialize() {
     return JNI_ENOMEM;
   }
 
-  // 
-  // [gc breakdown][region majflt]
+  // TODO:
+  // [gc breakdown][region majflt][swapout garbage]
   // PS reserves young and old heap in fixed size at startup,
   // the resize policy result will be clamped in reserved space.
   // Thus we init the bitmap at startup and can use it until JVM exits.
   // 
-  if (UseProfileRegionMajflt) {
-    // Init majflt region bitmap
-    size_t base = p2i(old_gen()->reserved().start());
-    size_t max_old_gen_size = old_gen()->reserved().byte_size();
-    size_t max_young_gen_size = young_gen()->reserved().byte_size();
-    size_t gcd_region_size = gcd(max_young_gen_size, max_old_gen_size);
-    size_t region_number = (max_young_gen_size + max_old_gen_size) / gcd_region_size;
-    os::init_majflt_region_bitmap(base, region_number, gcd_region_size);
-    // Set bitmap in consecutive range [0, old_end_region_id)
-    size_t old_end_region_id = max_old_gen_size / gcd_region_size;
-    os::region_majflt_add_from_start(old_end_region_id - 1);
-    // Dump bitmap to dmesg
-    os::region_majflt_dump_bitmap();
-    log_info(gc, init)("base " PTR_FORMAT ", max_old_gen_size %lu, max_young_gen_size %lu, "
-                       "gcd_region_size %lu, region_number %lu old_end_region_id %lu",
-                       p2i((char*)base), max_old_gen_size, max_young_gen_size,
-                       gcd_region_size, region_number, old_end_region_id);
-  }
+  // if (UseProfileRegionMajflt) {
+  //   // Init majflt region bitmap
+  //   size_t base = p2i(old_gen()->reserved().start());
+  //   size_t max_old_gen_size = old_gen()->reserved().byte_size();
+  //   size_t max_young_gen_size = young_gen()->reserved().byte_size();
+  //   size_t gcd_region_size = gcd(max_young_gen_size, max_old_gen_size);
+  //   size_t region_number = (max_young_gen_size + max_old_gen_size) / gcd_region_size;
+  //   os::init_majflt_region_bitmap(base, region_number, gcd_region_size);
+  //   // Set bitmap in consecutive range [0, old_end_region_id)
+  //   size_t old_end_region_id = max_old_gen_size / gcd_region_size;
+  //   os::region_majflt_add_from_start(old_end_region_id - 1);
+  //   // Dump bitmap to dmesg
+  //   os::region_majflt_dump_bitmap();
+  //   log_info(gc, init)("base " PTR_FORMAT ", max_old_gen_size %lu, max_young_gen_size %lu, "
+  //                      "gcd_region_size %lu, region_number %lu old_end_region_id %lu",
+  //                      p2i((char*)base), max_old_gen_size, max_young_gen_size,
+  //                      gcd_region_size, region_number, old_end_region_id);
+  // }
 
   ParallelInitLogger::print();
 

@@ -150,9 +150,9 @@ double HeapRegion::calc_gc_efficiency() {
 void HeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
 
-  // [gc breakdown][region majflt]
-  // Delete a old or humongous region.
-  if (UseProfileRegionMajflt && _type.is_old_or_humongous()) {
+  // [gc breakdown][region majflt][swapout garbage]
+  // Add a free region.
+  if (UseProfileRegionMajflt) {
     os::region_majflt_remove_region(_hrm_index);
   }
 
@@ -161,25 +161,48 @@ void HeapRegion::set_free() {
 
 void HeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove afree region.
+  if (UseProfileRegionMajflt && _type.is_free()) {
+    os::region_majflt_add_region(_hrm_index);
+  }
+
   _type.set_eden();
 }
 
 void HeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Convert survivor to eden
+  if (UseProfileRegionMajflt && _type.is_free()) {
+    os::region_majflt_add_region(_hrm_index);
+  }
+
   _type.set_eden_pre_gc();
 }
 
 void HeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove afree region.
+  if (UseProfileRegionMajflt && _type.is_free()) {
+    os::region_majflt_add_region(_hrm_index);
+  }
+
   _type.set_survivor();
 }
 
 void HeapRegion::move_to_old() {
+  // [gc breakdown][region majflt][swapout garbage]
+  bool pre_is_free = _type.is_free();
+
   if (_type.relabel_as_old()) {
-    // [gc breakdown][region majflt]
     // Change from [free, eden, survivor] to old region.
-    // Insert a old region.
-    if (UseProfileRegionMajflt) {
+    // Remove afree region.
+    if (UseProfileRegionMajflt && pre_is_free) {
       os::region_majflt_add_region(_hrm_index);
     }
 
@@ -190,9 +213,9 @@ void HeapRegion::move_to_old() {
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
 
-  // [gc breakdown][region majflt]
-  // Insert a old region.
-  if (UseProfileRegionMajflt) {
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove afree region.
+  if (UseProfileRegionMajflt && _type.is_free()) {
     os::region_majflt_add_region(_hrm_index);
   }
 
@@ -205,9 +228,9 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
 
-  // [gc breakdown][region majflt]
-  // insert a humongous retion
-  if (UseProfileRegionMajflt) {
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove afree region
+  if (UseProfileRegionMajflt && _type.is_free()) {
     os::region_majflt_add_region(_hrm_index);
   }
 
@@ -224,9 +247,9 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
 
-  // [gc breakdown][region majflt]
-  // Insert a humongous region.
-  if (UseProfileRegionMajflt) {
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove afree region.
+  if (UseProfileRegionMajflt && _type.is_free()) {
     os::region_majflt_add_region(_hrm_index);
   }
 

@@ -734,10 +734,10 @@ void JavaThread::post_run() {
   if (UseProfileRegionMajflt) {
     RegionMajfltStats proc_stats;
     os::current_thread_region_majflt(&proc_stats);
-    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, MajfltInRegion=%ld, MajfltOutRegion=%ld",
+    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, inheap=%ld, inheapfree=%ld",
       this->name(), Thread::current()->osthread()->thread_id(),
       majflt, minflt, user_time, sys_time,
-      proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+      proc_stats.swapout_in_heap, proc_stats.swapout_in_heap);
   } else {
     log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
       this->name(), Thread::current()->osthread()->thread_id(),

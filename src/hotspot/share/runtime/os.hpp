@@ -154,11 +154,11 @@ class MallocTracker;
 
 struct RegionMajfltStats {
   size_t majflt;
-  size_t majflt_in_region;
-  size_t majflt_out_region;
+  size_t user_time;
+  size_t sys_time;
+  size_t swapout_in_heap;
+  size_t swapout_in_heap_free;
   size_t minflt;
-  size_t user_ms;
-  size_t sys_ms;
 };
 
 class os: AllStatic {

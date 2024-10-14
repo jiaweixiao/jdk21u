@@ -495,14 +495,14 @@ void before_exit(JavaThread* thread, bool halt) {
   if (UseProfileRegionMajflt) {
 
     RegionMajfltStats sys_stats;
-    // os::get_system_region_majflt_stats(&sys_stats);
-    // log_info(gc)("SysRegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
-    //   sys_stats.majflt, sys_stats.majflt_in_region, sys_stats.majflt_out_region);
+    os::get_system_region_majflt_stats(&sys_stats);
+    log_info(gc)("SwapoutGarbage(exit jvm) in heap %ld, in heap free %ld",
+      sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free);
 
-    RegionMajfltStats proc_stats;
-    os::accum_proc_region_majflt(&proc_stats);
-    log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
-      proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
+    // RegionMajfltStats proc_stats;
+    // os::accum_proc_region_majflt(&proc_stats);
+    // log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
+    //   proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
   
     os::region_majflt_dump_bitmap();
     os::free_majflt_region_bitmap();

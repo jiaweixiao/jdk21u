@@ -1545,7 +1545,7 @@ jint G1CollectedHeap::initialize() {
 
   G1InitLogger::print();
 
-  // [gc breakdown][region majflt]
+  // [gc breakdown][region majflt][swapout garbage]
   // Dump bitmap to dmesg
   if (UseProfileRegionMajflt) {
     os::region_majflt_dump_bitmap();
