@@ -496,8 +496,8 @@ void before_exit(JavaThread* thread, bool halt) {
 
     RegionMajfltStats sys_stats;
     os::get_system_region_majflt_stats(&sys_stats);
-    log_info(gc)("SwapoutGarbage(exit jvm) in heap %ld, in heap free %ld",
-      sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free);
+    log_info(gc)("SwapoutGarbage(exit jvm) out heap %ld, in heap %ld, in heap free %ld",
+      sys_stats.swapout_out_heap, sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free);
 
     // RegionMajfltStats proc_stats;
     // os::accum_proc_region_majflt(&proc_stats);

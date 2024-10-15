@@ -67,8 +67,9 @@ void GCMajfltStats::end_and_log(const char* cause) {
     os::get_system_region_majflt_stats(_end_sys_stats);
     // os::accum_proc_region_majflt(_end_proc_stats);
 
-    log_info(gc)("SwapoutGarbage(%s) in heap (%ld -> %ld), in heap free (%ld -> %ld)",
+    log_info(gc)("SwapoutGarbage(%s) out heap (%ld -> %ld), in heap (%ld -> %ld), in heap free (%ld -> %ld)",
       cause,
+      _stt_sys_stats->swapout_out_heap, _end_sys_stats->swapout_out_heap,
       _stt_sys_stats->swapout_in_heap, _end_sys_stats->swapout_in_heap,
       _stt_sys_stats->swapout_in_heap_free, _end_sys_stats->swapout_in_heap_free);
 

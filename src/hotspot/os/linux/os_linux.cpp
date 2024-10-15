@@ -1533,12 +1533,17 @@ inline void proc_statmajflt(const char* fname, RegionMajfltStats* stats) {
   while (s && isspace(*s)) { s++; };
 
   // majflt maj_in_region maj_out_region user_clk sys_clk minflt
-  count = sscanf(s,"%lu %lu %lu %lu %lu %lu",
-                 &(stats->majflt), &(stats->swapout_in_heap), &(stats->swapout_in_heap_free),
-                 &(stats->user_time), &(stats->sys_time),
+  count = sscanf(s,"%lu %lu %lu %lu %lu %lu %lu",
+                 &(stats->majflt), 
+                 &(stats->swapout_out_heap), 
+                 &(stats->swapout_in_heap),
+                 &(stats->swapout_in_heap_free),
+                 &(stats->user_time),
+                 &(stats->sys_time),
                  &(stats->minflt));
-  if (count != 6) {
+  if (count != 7) {
     stats->majflt = 0;
+    stats->swapout_out_heap = 0;
     stats->swapout_in_heap = 0;
     stats->swapout_in_heap_free = 0;
     stats->user_time = 0;
@@ -1700,8 +1705,8 @@ void os::dump_thread_region_majflt() {
     tid = jt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, inheap=%ld, inheapfree=%ld",
-      jt->name(), tid, stats.majflt, stats.swapout_in_heap, stats.swapout_in_heap_free);
+    log_info(gc, thread)("JavaThread %s(tid=%d), Majflt=%ld, outheap=%ld, inheap=%ld, inheapfree=%ld",
+      jt->name(), tid, stats.majflt, stats.swapout_out_heap, stats.swapout_in_heap, stats.swapout_in_heap_free);
   }
 
   for (NonJavaThread::Iterator njti; !njti.end(); njti.step()) {
@@ -1709,8 +1714,8 @@ void os::dump_thread_region_majflt() {
     tid = njt->osthread()->thread_id();
     snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", tid);
     proc_statmajflt(proc_name, &stats);
-    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, inheap=%ld, inheapfree=%ld",
-      njt->name(), tid, stats.majflt, stats.swapout_in_heap, stats.swapout_in_heap);
+    log_info(gc, thread)("NonJavaThread %s(tid=%d), Majflt=%ld, outheap=%ld, inheap=%ld, inheapfree=%ld",
+      njt->name(), tid, stats.majflt, stats.swapout_out_heap, stats.swapout_in_heap, stats.swapout_in_heap);
   }
 }
 

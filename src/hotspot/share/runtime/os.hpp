@@ -156,6 +156,7 @@ struct RegionMajfltStats {
   size_t majflt;
   size_t user_time;
   size_t sys_time;
+  size_t swapout_out_heap;
   size_t swapout_in_heap;
   size_t swapout_in_heap_free;
   size_t minflt;
