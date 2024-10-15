@@ -44,8 +44,8 @@ class GCMajfltStats {
   long _stt_minflt;
   long _stt_user_ms;
   long _stt_sys_ms;
-  RegionMajfltStats* _stt_sys_stats;
-  RegionMajfltStats* _end_sys_stats;
+  SysRegionMajfltStats* _stt_sys_stats;
+  SysRegionMajfltStats* _end_sys_stats;
   // RegionMajfltStats* _stt_proc_stats;
   // RegionMajfltStats* _end_proc_stats;
 

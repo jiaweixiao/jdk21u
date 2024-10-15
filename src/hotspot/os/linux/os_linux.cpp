@@ -1534,13 +1534,13 @@ inline void proc_statmajflt(const char* fname, RegionMajfltStats* stats) {
 
   // majflt maj_in_region maj_out_region user_clk sys_clk minflt
   count = sscanf(s,"%lu %lu %lu %lu %lu %lu %lu",
-                 &(stats->majflt), 
-                 &(stats->swapout_out_heap), 
-                 &(stats->swapout_in_heap),
-                 &(stats->swapout_in_heap_free),
+                 &(stats->majflt),
+                 &(stats->minflt),
                  &(stats->user_time),
                  &(stats->sys_time),
-                 &(stats->minflt));
+                 &(stats->swapout_out_heap), 
+                 &(stats->swapout_in_heap),
+                 &(stats->swapout_in_heap_free));
   if (count != 7) {
     stats->majflt = 0;
     stats->swapout_out_heap = 0;
@@ -1682,7 +1682,7 @@ void os::reset_system_region_majflt_stats() {
   syscall(451);
 }
 
-void os::get_system_region_majflt_stats(RegionMajfltStats* stats) {
+void os::get_system_region_majflt_stats(SysRegionMajfltStats* stats) {
   syscall(452, stats);
 }
 

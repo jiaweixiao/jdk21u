@@ -152,14 +152,27 @@ typedef void (*java_call_t)(JavaValue* value, const methodHandle& method, JavaCa
 
 class MallocTracker;
 
+struct SysRegionMajfltStats {
+  size_t majflt;
+  size_t minflt;
+  size_t swapin_sync;
+  size_t swapin_async;
+  size_t swapin_out_heap;
+  size_t swapin_in_heap;
+  size_t swapin_in_heap_free;
+  size_t swapout_out_heap;
+  size_t swapout_in_heap;
+  size_t swapout_in_heap_free;
+};
+
 struct RegionMajfltStats {
   size_t majflt;
+  size_t minflt;
   size_t user_time;
   size_t sys_time;
   size_t swapout_out_heap;
   size_t swapout_in_heap;
   size_t swapout_in_heap_free;
-  size_t minflt;
 };
 
 class os: AllStatic {
@@ -313,7 +326,7 @@ class os: AllStatic {
   static void region_majflt_add_till_end(uint region_id);
   static void region_majflt_dump_bitmap();
   static void reset_system_region_majflt_stats();
-  static void get_system_region_majflt_stats(RegionMajfltStats* stats);
+  static void get_system_region_majflt_stats(SysRegionMajfltStats* stats);
   static void accum_proc_region_majflt(RegionMajfltStats* stats);
   static void current_thread_region_majflt(RegionMajfltStats* stats);
   static void dump_thread_region_majflt();

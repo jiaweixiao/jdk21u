@@ -32,8 +32,8 @@ GCStats::GCStats() : _avg_promoted(new AdaptivePaddedNoZeroDevAverage(AdaptiveSi
 GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0), _stt_sys_ms(0) {
   // Allocation in thread-local resource area
   if (UseProfileRegionMajflt) {
-    _stt_sys_stats = NEW_RESOURCE_OBJ(RegionMajfltStats);
-    _end_sys_stats = NEW_RESOURCE_OBJ(RegionMajfltStats);
+    _stt_sys_stats = NEW_RESOURCE_OBJ(SysRegionMajfltStats);
+    _end_sys_stats = NEW_RESOURCE_OBJ(SysRegionMajfltStats);
     // _stt_proc_stats = NEW_RESOURCE_OBJ(RegionMajfltStats);
     // _end_proc_stats = NEW_RESOURCE_OBJ(RegionMajfltStats);
   }
@@ -41,8 +41,8 @@ GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0)
 
 GCMajfltStats::~GCMajfltStats() {
   if (UseProfileRegionMajflt) {
-    FREE_RESOURCE_ARRAY(RegionMajfltStats, _stt_sys_stats, 1);
-    FREE_RESOURCE_ARRAY(RegionMajfltStats, _end_sys_stats, 1);
+    FREE_RESOURCE_ARRAY(SysRegionMajfltStats, _stt_sys_stats, 1);
+    FREE_RESOURCE_ARRAY(SysRegionMajfltStats, _end_sys_stats, 1);
     // FREE_RESOURCE_ARRAY(RegionMajfltStats, _stt_proc_stats, 1);
     // FREE_RESOURCE_ARRAY(RegionMajfltStats, _end_proc_stats, 1);
   }
@@ -67,8 +67,11 @@ void GCMajfltStats::end_and_log(const char* cause) {
     os::get_system_region_majflt_stats(_end_sys_stats);
     // os::accum_proc_region_majflt(_end_proc_stats);
 
-    log_info(gc)("SwapoutGarbage(%s) out heap (%ld -> %ld), in heap (%ld -> %ld), in heap free (%ld -> %ld)",
+    log_info(gc)("SwapoutGarbage(%s) pagein out heap (%ld -> %ld), pagein in heap (%ld -> %ld), pagein in heap free (%ld -> %ld), pageout out heap (%ld -> %ld), pageout in heap (%ld -> %ld), pageout in heap free (%ld -> %ld)",
       cause,
+      _stt_sys_stats->swapin_out_heap, _end_sys_stats->swapin_out_heap,
+      _stt_sys_stats->swapin_in_heap, _end_sys_stats->swapin_in_heap,
+      _stt_sys_stats->swapin_in_heap_free, _end_sys_stats->swapin_in_heap_free,
       _stt_sys_stats->swapout_out_heap, _end_sys_stats->swapout_out_heap,
       _stt_sys_stats->swapout_in_heap, _end_sys_stats->swapout_in_heap,
       _stt_sys_stats->swapout_in_heap_free, _end_sys_stats->swapout_in_heap_free);

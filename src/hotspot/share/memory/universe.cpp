@@ -849,10 +849,15 @@ jint Universe::initialize_heap() {
   if (UseProfileRegionMajflt) {
     os::reset_system_region_majflt_stats();
 
-    RegionMajfltStats sys_stats;
+    SysRegionMajfltStats sys_stats;
     os::get_system_region_majflt_stats(&sys_stats);
-    log_info(gc)("SwapoutGarbage(init heap) out heap %ld, in heap %ld, in heap free %ld",
-      sys_stats.swapout_out_heap, sys_stats.swapout_in_heap, sys_stats.swapout_in_heap_free);
+    log_info(gc)("SwapoutGarbage(init heap) pagein out heap %ld, pagein in heap %ld, pagein in heap free %ld, pageout out heap %ld, pageout in heap %ld, pageout in heap free %ld",
+      sys_stats.swapin_out_heap,
+      sys_stats.swapin_in_heap,
+      sys_stats.swapin_in_heap_free,
+      sys_stats.swapout_out_heap,
+      sys_stats.swapout_in_heap,
+      sys_stats.swapout_in_heap_free);
 
     // RegionMajfltStats proc_stats;
     // os::accum_proc_region_majflt(&proc_stats);
