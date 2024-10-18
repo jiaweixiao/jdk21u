@@ -1063,6 +1063,13 @@ void G1YoungCollector::collect() {
     // modifies it to the next state.
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
 
+  if(G1UseHighThruTuning) {
+    //shengkai: calculate gc time here
+    policy()->calculate_minor_gc();
+    log_info(gc, ergo)("[DEBUG] minor gc time! User=%lfs, Sys=%lfs, Real=%lfs", \
+                     policy()->_gc_user_time, policy()->_gc_sys_time, policy()->_gc_real_time);
+  }
+
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
   }
   TASKQUEUE_STATS_ONLY(_g1h->task_queues()->print_and_reset_taskqueue_stats("Oop Queue");)

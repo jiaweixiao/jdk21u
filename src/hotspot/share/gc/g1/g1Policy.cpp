@@ -251,7 +251,7 @@ size_t eden_rounding(size_t eden_size){
 }
 
 double eden_decre_factor(double sys, double user){
-  return 0.4 - user/(5*sys);
+  return 0.4 - user/(5*sys) - 0.1;
 }
 
 #define SMALL_EDEN_STEP 128*MB
@@ -289,9 +289,10 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
   // one eden region, to ensure progress. But when revising during the ensuing
   // mutator phase we might have already allocated more than either of those, in
   // which case use that.
-  uint absolute_min_young_length = MAX3(min_young_length_by_sizer,
-                                        survivor_length + 1,
-                                        allocated_young_length);
+  // uint absolute_min_young_length = MAX3(min_young_length_by_sizer,
+  //                                       survivor_length + 1,
+  //                                       allocated_young_length);
+  uint absolute_min_young_length = MAX2(survivor_length + 10,allocated_young_length);
   // Calculate the absolute max bounds. After evac failure or when revising the
   // young length we might have exceeded absolute min length or absolute_max_length,
   // so adjust the result accordingly.
@@ -316,16 +317,17 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
           //small eden with fast alloc, incre eden
           desired_eden_count += SMALL_EDEN_STEP;
           log_info(gc, ergo)("[DEBUG] incre eden for one step(fast alloc or small eden), new eden = %ld", desired_eden_count);
-        }else if(mut_sys_time_base > _mut_user_time || gc_sys_time_base > _gc_user_time){
+        }else if(gc_sys_time_base > 2*_gc_user_time){
+		  //}else if(mut_sys_time_base > _mut_user_time || gc_sys_time_base > _gc_user_time){
           //decre eden for large WSS
           double mut_decre = mut_sys_time_base > _mut_user_time ? eden_decre_factor(_mut_sys_time,_mut_user_time) : 0;
           double gc_decre = gc_sys_time_base > _gc_user_time ? eden_decre_factor(_gc_sys_time,_gc_user_time) : 0;
           double decre = (mut_decre - gc_decre) / 4 + gc_decre;
           desired_eden_count = (size_t)((double)desired_eden_count * (1 - decre));
           log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_count);
-        }else if(5*_mut_sys_time < _mut_user_time || 5*_gc_sys_time < _gc_user_time){
+        }else if(2*_mut_sys_time < _mut_user_time || 2*_gc_sys_time < _gc_user_time){
           //slow incre eden
-          desired_eden_count += 16*MB;
+          desired_eden_count += 32*MB;
           log_info(gc, ergo)("[DEBUG] slow incre when sys time small");
         }else{
           log_info(gc, ergo)("[DEBUG] do nothing!");
@@ -334,7 +336,10 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
       //check update _cur_eden
       desired_eden_length = eden_rounding(desired_eden_count);
     } else {
-      _is_init = false;
+		if(_is_init = true){
+      		_is_init = false;
+			absolute_min_young_length = MAX2(min_young_length_by_sizer, absolute_min_young_length);
+		}
       desired_eden_length_by_mmu = calculate_desired_eden_length_by_mmu();
 
       double base_time_ms = predict_base_time_ms(pending_cards, rs_length);
@@ -1075,12 +1080,6 @@ void G1Policy::record_young_gc_pause_end(bool evacuation_failed) {
   phase_times()->record_gc_pause_end();
   phase_times()->print(evacuation_failed);
   if(G1UseHighThruTuning) {
-    //shengkai: calculate gc time here
-    calculate_minor_gc();
-    log_info(gc, ergo)("[DEBUG] minor gc time! User=%lfs, Sys=%lfs, Real=%lfs", \
-                     _gc_user_time, _gc_sys_time, _gc_real_time);
-
-
     //shengkai: record mutator begin
     update_before_stage();
     log_info(gc, ergo)("[DEBUG] finish minor gc! User=%lfs, Sys=%lfs, Real=%lfs", \
