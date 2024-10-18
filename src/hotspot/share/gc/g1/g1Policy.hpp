@@ -470,7 +470,8 @@ public:
 
   size_t _prev_eden;      // step back
   double _prev_mut_rate;  // step back flag
-  bool   _is_backed;	  // flag of mv back
+  bool   _is_init;	  // flag of mv back
+  size_t _cur_eden;
 
   // shengkai: update time record
   // update beginning

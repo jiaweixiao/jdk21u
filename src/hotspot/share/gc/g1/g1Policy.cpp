@@ -90,7 +90,8 @@ G1Policy::G1Policy(STWGCTimer* gc_timer) :
     update_before_stage();
     _prev_mut_rate = 0;
     _prev_eden = 0;
-    _is_backed = false;
+    _is_init = true;
+    _cur_eden = 0;
     log_info(gc, ergo)("[DEBUG] init pre time with policy initialization! User=%lfs, Sys=%lfs, Real=%lfs",_pre_user_time,_pre_sys_time,_pre_real_time);
   }
 }
@@ -218,6 +219,9 @@ void G1Policy::update_young_length_bounds(size_t pending_cards, size_t rs_length
   uint new_young_list_target_length = calculate_young_target_length(new_young_list_desired_length);
   uint new_young_list_max_length = calculate_young_max_length(new_young_list_target_length);
 
+  //shengkai update _cur_eden
+  _cur_eden = (new_young_list_target_length - _g1h->survivor_regions_count()) * G1HeapRegionSize;
+
   log_trace(gc, ergo, heap)("Young list length update: pending cards %zu rs_length %zu old target %u desired: %u target: %u max: %u",
                             pending_cards,
                             rs_length,
@@ -237,6 +241,20 @@ void G1Policy::update_young_length_bounds(size_t pending_cards, size_t rs_length
   Atomic::store(&_young_list_target_length, new_young_list_target_length);
   Atomic::store(&_young_list_max_length, new_young_list_max_length);
 }
+
+//shengkai add defines and funcs
+//16 MB rounding off 
+#define MB 1024*1024
+size_t eden_rounding(size_t eden_size){
+  uint result = (uint)(eden_size + 8 * MB) / G1HeapRegionSize;
+  return result;
+}
+
+double eden_decre_factor(double sys, double user){
+  return 0.4 - user/(5*sys);
+}
+
+#define SMALL_EDEN_STEP 128*MB
 
 // Calculates desired young gen length. It is calculated from:
 //
@@ -281,56 +299,42 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
 
   uint desired_eden_length_by_mmu = 0;
   uint desired_eden_length_by_pause = 0;
+  uint desired_eden_length = 0;
 
   uint desired_young_length = 0;
   if (use_adaptive_young_list_length()) {
-    if(G1UseHighThruTuning) {
-      uint desired_eden_length = 0;
-      size_t cur_eden = _g1h->eden_regions_count() * G1HeapRegionSize;
-      size_t desired_eden_count = cur_eden;
+    if(G1UseHighThruTuning && _is_init == false) {
+      size_t desired_eden_count = _cur_eden;
       {
         // shengkai: eden space step and prev adaptive information
         double gc_rate = _gc_user_time / _mut_user_time;
-        double sys_rate = 0.0;
-        if (gc_rate < 1) {
-          sys_rate = (_mut_sys_time + _gc_sys_time) / (_mut_user_time + _gc_user_time);
-        } else {
-          //ignore app interference when young gen is small enough
-          sys_rate = _gc_sys_time / _gc_user_time;
-        }
-
-        double mut_rate = _mut_user_time / (_mut_user_time + _mut_sys_time + _gc_user_time + _gc_sys_time);
-        if ((mut_rate < _prev_mut_rate) && (_is_backed ==
-                                            false)) {//detect interferences of app pattern changes(should be short) , keep size until stable
-          _is_backed = true;
-          desired_eden_count = _prev_eden;
-          log_info(gc, ergo)("[DEBUG] back eden for %lf<0.9*%lf, new eden = %ld", mut_rate, _prev_mut_rate,
-                             desired_eden_count);
-        } else if (sys_rate > gc_rate/* super param */) {
-          // majflat block more, assume no more than 10 times block
-          _is_backed = false;
-          double decre = 0.05 * (_mut_sys_time + _gc_sys_time) / _mut_user_time;
-          if (decre > 0.5 /* super param, max decre 40% at once*/)
-            decre = 0.5;
-          desired_eden_count = (size_t)((double) desired_eden_count * (1 - decre));
+        double sys_rate = (_mut_sys_time + _gc_sys_time) / (_mut_user_time + _gc_user_time);
+        double mut_sys_time_base = _mut_sys_time > 0.1 ? 2*_mut_sys_time:0;
+        double gc_sys_time_base = _gc_sys_time > 0.1 ? 2*_gc_sys_time:0;
+        //double mut_rate = _mut_user_time / (_mut_user_time + _mut_sys_time + _gc_user_time + _gc_sys_time);
+        if(2 * _gc_real_time >= _mut_real_time && _gc_real_time < 0.03){
+          //small eden with fast alloc, incre eden
+          desired_eden_count += SMALL_EDEN_STEP;
+          log_info(gc, ergo)("[DEBUG] incre eden for one step(fast alloc or small eden), new eden = %ld", desired_eden_count);
+        }else if(mut_sys_time_base > _mut_user_time || gc_sys_time_base > _gc_user_time){
+          //decre eden for large WSS
+          double mut_decre = mut_sys_time_base > _mut_user_time ? eden_decre_factor(_mut_sys_time,_mut_user_time) : 0;
+          double gc_decre = gc_sys_time_base > _gc_user_time ? eden_decre_factor(_gc_sys_time,_gc_user_time) : 0;
+          double decre = (mut_decre - gc_decre) / 4 + gc_decre;
+          desired_eden_count = (size_t)((double)desired_eden_count * (1 - decre));
           log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_count);
-        } else {
-          // gc cost more
-          _is_backed = false;
-          double incre = 0.1 * gc_rate;
-          if (incre > 1/* super param, max triple eden size at once*/)
-            incre = 1;
-          desired_eden_count += (size_t)((double) 1024 * 1024 * 1024 * incre);
-          log_info(gc, ergo)("[DEBUG] incre eden for %lfg, new eden = %ld", incre, desired_eden_count);
-        }
-
-        if (_is_backed == false) {
-          _prev_eden = cur_eden;
-          _prev_mut_rate = mut_rate;
+        }else if(5*_mut_sys_time < _mut_user_time || 5*_gc_sys_time < _gc_user_time){
+          //slow incre eden
+          desired_eden_count += 16*MB;
+          log_info(gc, ergo)("[DEBUG] slow incre when sys time small");
+        }else{
+          log_info(gc, ergo)("[DEBUG] do nothing!");
         }
       }
-      desired_eden_length = desired_eden_count / G1HeapRegionSize;
+      //check update _cur_eden
+      desired_eden_length = eden_rounding(desired_eden_count);
     } else {
+      _is_init = false;
       desired_eden_length_by_mmu = calculate_desired_eden_length_by_mmu();
 
       double base_time_ms = predict_base_time_ms(pending_cards, rs_length);
@@ -353,6 +357,8 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
   }
   // Clamp to absolute min/max after we determined desired lengths.
   desired_young_length = clamp(desired_young_length, absolute_min_young_length, absolute_max_young_length);
+
+  log_info(gc, ergo)("[DEBUG] high throughput desire eden length %u, young length %u", desired_eden_length, desired_young_length);
 
   log_trace(gc, ergo, heap)("Young desired length %u "
                             "survivor length %u "
@@ -599,7 +605,8 @@ void G1Policy::revise_young_list_target_length(size_t rs_length) {
   size_t thread_buffer_cards = _analytics->predict_dirtied_cards_in_thread_buffers();
   G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
   size_t pending_cards = dcqs.num_cards() + thread_buffer_cards;
-  update_young_length_bounds(pending_cards, rs_length);
+  if(G1UseHighThruTuning == false)
+    update_young_length_bounds(pending_cards, rs_length);
 }
 
 void G1Policy::record_full_collection_start() {
