@@ -1001,6 +1001,56 @@ G1YoungCollector::G1YoungCollector(GCCause::Cause gc_cause) :
 {
 }
 
+class ScanRegionRemsetClosure;
+
+class ScanRemsetClosure : public G1CardSet::CardClosure {
+  ScanRegionRemsetClosure* _cl;
+  public:
+    ScanRemsetClosure(ScanRegionRemsetClosure* cl):_cl(cl){}
+    virtual void do_card(uint region_idx, uint card_idx){
+      _cl->do_incoming_region();
+    }
+};
+
+class ScanRegionRemsetClosure : public HeapRegionClosure {
+  G1CollectedHeap* _g1h;
+  bool* _incoming_regions;
+  uint _num_regions;
+  LogStream _ls;
+
+public:
+  // Typically called on each region until it returns true.
+  ScanRegionRemsetClosure(G1CollectedHeap* g1h){
+    _g1h = g1h;
+    _num_regions = _g1h->num_regions();
+    _incoming_regions = NEW_C_HEAP_ARRAY(bool, _num_regions, mtGC);
+    memset((void*)_incoming_regions, 0, sizeof(bool));
+    for(int i = 0; i < num_regions; i++){
+      _incoming_regions[i] = false;
+    }
+    lt = LogTarget(Info, gc, heap);
+    _ls = LogStream(lt);
+  }
+
+  ~ScanRegionRemsetClosure(){
+    FREE_C_HEAP_ARRAY(bool, _num_regions);
+  }
+
+  virtual bool do_heap_region(HeapRegion* r){
+    ScanRemsetClosure cl(this);
+    _ls.print("Region %u: ", r->hrm_index());
+    r->rem_set()->iterate_cards(cl);
+    _ls.print_cr("");
+  }
+
+  void do_incoming_region(uint region_idx){
+    if(!_incoming_regions[region_idx]){
+      _ls.print("%u, ", region_idx);
+    }
+    _incoming_regions[region_idx] = true;
+  }
+};
+
 void G1YoungCollector::collect() {
   // Do timing/tracing/statistics/pre- and post-logging/verification work not
   // directly related to the collection. They should not be accounted for in
@@ -1038,6 +1088,9 @@ void G1YoungCollector::collect() {
     // policy for the collection deliberately elides verification (and some
     // other trivial setup above).
     policy()->record_young_collection_start();
+
+    ScanRegionRemsetClosure cl(_g1h);
+    _g1h->heap_region_iterate(&cl);
 
     pre_evacuate_collection_set(jtm.evacuation_info());
 
