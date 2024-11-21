@@ -1212,6 +1212,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
     void process_card(CardValue* card_ptr) {
       if (*card_ptr == G1CardTable::dirty_card_val()) {
         uint const region_idx = _ct->region_idx_for(card_ptr);
+        log_info(gc)("process dirty card in log entry of region %u", region_idx);
         _scan_state->add_dirty_region(region_idx);
         _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(card_ptr));
         _cards_dirty++;

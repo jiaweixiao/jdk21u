@@ -127,7 +127,7 @@ void HeapRegion::hr_clear(bool clear_space) {
   reset_pre_dummy_top();
 
   rem_set()->clear_locked();
-  log_info(gc)("clear remset (hr clear) of %u", hrm_index());
+  // log_info(gc)("clear remset (hr clear) of %u", hrm_index());
 
 
   init_top_at_mark_start();
