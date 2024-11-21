@@ -206,11 +206,19 @@ public:
 class G1ConcurrentRefineOopClosure: public BasicOopIterateClosure {
   G1CollectedHeap* _g1h;
   uint _worker_id;
+  bool* _to_regions;
+  uint _num_regions;
 
 public:
   G1ConcurrentRefineOopClosure(G1CollectedHeap* g1h, uint worker_id) :
     _g1h(g1h),
     _worker_id(worker_id) {
+    _to_regions = NEW_C_HEAP_ARRAY(bool, _num_regions, mtGC);
+    memset(_to_regions, 0, sizeof(bool)*_num_regions)
+  }
+
+  ~G1ConcurrentRefineOopClosure(){
+    FREE_C_HEAP_ARRAY(bool, _to_regions);
   }
 
   virtual ReferenceIterationMode reference_iteration_mode() { return DO_FIELDS; }
