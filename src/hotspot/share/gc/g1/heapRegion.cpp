@@ -107,6 +107,8 @@ void HeapRegion::handle_evacuation_failure() {
   move_to_old();
 
   _rem_set->clean_code_roots(this);
+  log_info(gc)("clear remset (evac failure) of %u", hrm_index());
+
   _rem_set->clear_locked(true /* only_cardset */);
 }
 
@@ -125,6 +127,8 @@ void HeapRegion::hr_clear(bool clear_space) {
   reset_pre_dummy_top();
 
   rem_set()->clear_locked();
+  log_info(gc)("clear remset (hr clear) of %u", hrm_index());
+
 
   init_top_at_mark_start();
   if (clear_space) clear(SpaceDecorator::Mangle);

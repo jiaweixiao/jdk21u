@@ -32,6 +32,7 @@ G1FullGCResetMetadataTask::G1ResetMetadataClosure::G1ResetMetadataClosure(G1Full
   _collector(collector) { }
 
 void G1FullGCResetMetadataTask::G1ResetMetadataClosure::reset_region_metadata(HeapRegion* hr) {
+  log_info(gc)("clear remset (full gc reset meta) of %u", hr->hrm_index());
   hr->rem_set()->clear();
   hr->clear_cardtable();
 }

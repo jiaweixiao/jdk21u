@@ -155,6 +155,7 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
         add_region(r);
       } else if (r->is_old()) {
         // Keep remembered sets for humongous regions, otherwise clean them out.
+        log_info(gc)("clear remset (build candidate) of %u", r->hrm_index());
         r->rem_set()->clear(true /* only_cardset */);
       } else {
         assert(!r->is_old() || !r->rem_set()->is_tracked(),
@@ -209,6 +210,7 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
           wasted_bytes + reclaimable > allowed_waste) {
         break;
       }
+      log_info(gc)("clear remset (build candidate prune) of %u", r->hrm_index());
       r->rem_set()->clear(true /* cardset_only */);
 
       wasted_bytes += reclaimable;

@@ -59,6 +59,7 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/threads.hpp"
 #include "utilities/ticks.hpp"
+#include "logging/logStream.hpp"
 
 // GCTraceTime wrapper that constructs the message according to GC pause type and
 // GC cause.
@@ -1007,9 +1008,7 @@ class ScanRemsetClosure : public G1CardSet::CardClosure {
   ScanRegionRemsetClosure* _cl;
   public:
     ScanRemsetClosure(ScanRegionRemsetClosure* cl):_cl(cl){}
-    virtual void do_card(uint region_idx, uint card_idx){
-      _cl->do_incoming_region();
-    }
+    virtual void do_card(uint region_idx, uint card_idx);
 };
 
 class ScanRegionRemsetClosure : public HeapRegionClosure {
@@ -1017,39 +1016,50 @@ class ScanRegionRemsetClosure : public HeapRegionClosure {
   bool* _incoming_regions;
   uint _num_regions;
   LogStream _ls;
+  bool has_incoming = false;
 
 public:
   // Typically called on each region until it returns true.
-  ScanRegionRemsetClosure(G1CollectedHeap* g1h){
+  ScanRegionRemsetClosure(G1CollectedHeap* g1h):_ls(LogTarget(Info, gc, heap)()){
     _g1h = g1h;
     _num_regions = _g1h->num_regions();
     _incoming_regions = NEW_C_HEAP_ARRAY(bool, _num_regions, mtGC);
-    memset((void*)_incoming_regions, 0, sizeof(bool));
-    for(int i = 0; i < num_regions; i++){
-      _incoming_regions[i] = false;
-    }
-    lt = LogTarget(Info, gc, heap);
-    _ls = LogStream(lt);
+    
+    // for(uint i = 0; i < _num_regions; i++){
+    //   _incoming_regions[i] = false;
+    // }
+    // LogTarget(Info, gc, heap) lt;
+    // _ls = LogStream(lt);
   }
 
   ~ScanRegionRemsetClosure(){
-    FREE_C_HEAP_ARRAY(bool, _num_regions);
+    FREE_C_HEAP_ARRAY(bool, _incoming_regions);
   }
 
   virtual bool do_heap_region(HeapRegion* r){
     ScanRemsetClosure cl(this);
-    _ls.print("Region %u: ", r->hrm_index());
+    memset((void*)_incoming_regions, 0, sizeof(bool)*_num_regions);
+    has_incoming = false;
     r->rem_set()->iterate_cards(cl);
-    _ls.print_cr("");
+    if(has_incoming){
+      _ls.print("into Region %u", r->hrm_index());
+      _ls.print_cr("");
+    }
+    return false;
   }
 
   void do_incoming_region(uint region_idx){
+    has_incoming = true;
     if(!_incoming_regions[region_idx]){
       _ls.print("%u, ", region_idx);
     }
     _incoming_regions[region_idx] = true;
   }
 };
+
+void ScanRemsetClosure::do_card(uint region_idx, uint card_idx){
+  _cl->do_incoming_region(region_idx);
+}
 
 void G1YoungCollector::collect() {
   // Do timing/tracing/statistics/pre- and post-logging/verification work not

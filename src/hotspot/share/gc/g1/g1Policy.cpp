@@ -1292,6 +1292,8 @@ void G1Policy::abandon_collection_set_candidates() {
   // set.
   for (HeapRegion* r : *candidates()) {
     r->rem_set()->clear_locked(true /* only_cardset */);
+    log_info(gc)("clear remset (abandon candidates) of %u", r->hrm_index());
+
   }
   _collection_set->abandon_all_candidates();
 }

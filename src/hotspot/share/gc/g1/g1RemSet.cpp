@@ -1180,6 +1180,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
       // implicitly rebuild anything else during eager reclaim. Note that at the moment
       // (and probably never) we do not enter this path if there are other kind of
       // remembered sets for this region.
+      log_info(gc)("clear remset (merge heap roots) of %u", r->hrm_index());
       r->rem_set()->clear_locked(true /* only_cardset */);
       // Clear_locked() above sets the state to Empty. However we want to continue
       // collecting remembered set entries for humongous regions that were not
