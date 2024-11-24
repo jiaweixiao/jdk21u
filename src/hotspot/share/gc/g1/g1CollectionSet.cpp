@@ -22,6 +22,8 @@
  *
  */
 
+
+#include "logging/log.hpp"
 #include "precompiled.hpp"
 #include "gc/g1/g1Analytics.hpp"
 #include "gc/g1/g1CollectedHeap.inline.hpp"
@@ -37,7 +39,17 @@
 #include "runtime/orderAccess.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/linkedlist.hpp"
 #include "utilities/quickSort.hpp"
+#include "queue"
+#include "set"
+#include <cstddef>
+#include <unordered_set>
+#include "gc/g1/g1CardTable.hpp"
+#include "gc/g1/g1RemSet.hpp"
+#include "gc/g1/heapRegion.hpp"
+#include "memory/resourceArea.hpp"
+#include "gc/g1/g1CollectionSetCandidates.inline.hpp"
 
 G1CollectorState* G1CollectionSet::collector_state() const {
   return _g1h->collector_state();
@@ -317,10 +329,119 @@ static int compare_region_idx(const uint a, const uint b) {
   return static_cast<int>(a-b);
 }
 
+uint cur_region_index = 0;
+
+void G1CollectionSet::finalize_incr_old_part() {
+  ResourceMark rm;
+  // if (collector_state()->in_mixed_phase() || _g1h->total_collections() < 20) {
+  // if (collector_state()->in_mixed_phase()) {
+  //   log_info(gc) ("Don't need to reclaim old regions incrementally during mixed gc");
+  //   return;
+  // }
+  using CardValue = CardTable::CardValue;
+  G1CollectionCandidateRegionList incr_old_regions;
+
+  auto &hrm = _g1h->_hrm;
+  uint len = hrm.reserved_length();
+
+  LinkedListQueue<uint> r_to_visit;
+  LinkedListSet<uint> r_visited;
+  size_t count = 0;
+
+  //   for (uint i = 0; i < len; i++) {
+  //   if (!hrm.is_available(i)) {
+  //     continue;
+  //   }
+  //   auto r = hrm.at(i);
+  //   // if (r->is_old() && candidates()->contains(r)) {
+  //   if (r->is_old()) {
+  //     // todo add this region to current collection
+  //     log_info(gc) ("Old region[%u]'s remset is %s (in candidates? %s)", r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
+  //   } else if (r->is_free()) {
+  //     log_info(gc) ("Free region[%u]'s remset is %s (in candidates? %s)", r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
+  //   }
+  // }
+
+  // problem 2
+  for (uint i = 0; i < len; i++) {
+    // log_info(gc) ("cur_region_index: %u", cur_region_index);
+    if (!hrm.is_available(i)) {
+      continue;
+    }
+    auto r = hrm.at(i);
+    // if (r->is_old() && candidates()->contains(r)) {
+    // if (r->is_old() && r->rem_set()->is_complete()) {
+    if (r->is_old()) {
+      // todo add this region to current collection
+      log_info(gc) ("%s region[%u]'s remset is %s (in candidates? %s)", r->get_type_str(), r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
+      r_to_visit.push(r->hrm_index());
+      r_visited.insert(r->hrm_index());
+      count++;
+      // incr_old_regions.append(r);
+      // break;
+    }
+    if (count == 50) break;
+  }
+  G1RemSet * rset = _g1h->rem_set();
+  log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
+  rset->build_old_union(r_to_visit, r_visited);
+  log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
+
+  // if (candidates()->marking_regions().length() != 0) {
+  //   G1CollectionCandidateListIterator iter = candidates()->marking_regions().begin();
+  //   for (; iter != candidates()->marking_regions().end(); ++iter) {
+  //     HeapRegion* hr = *iter;
+  //     log_info(gc) ("[yyz] From candidates: %u", hr->hrm_index());
+  //     r_to_visit.push(hr->hrm_index());
+  //     r_visited.insert(hr->hrm_index());
+  //     incr_old_regions.append(hr);
+  //     count++;
+  //     if (count == 8) break;
+  //   }
+    
+  //   G1RemSet * rset = _g1h->rem_set();
+  //   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
+  //   rset->build_old_union(r_to_visit, r_visited);
+  //   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
+  // }
+
+  LinkedListIterator<uint> it(r_visited.head());
+  while (!it.is_empty()) {
+    const uint* res = it.next();
+    if (res != nullptr) {
+      auto r = hrm.at(*res);
+      auto rr = r->is_old();
+      log_info(gc) ("is_old: %d, %u", rr, *res);
+      if (!candidates()->contains(r)) {
+        incr_old_regions.append(r);
+      }
+    }
+  }
+  
+  uint _cur_cset_length = _collection_set_cur_length;
+  // need modification
+  // move_candidates_to_collection_set(&incr_old_regions);
+  // log_info(gc) ("number of candidates: %u", _candidates.length());
+  for (HeapRegion* r : incr_old_regions) {
+    if (r->is_old()) {
+      log_info(gc) ("%u", r->hrm_index());
+    }
+    _g1h->clear_region_attr(r);
+    add_old_region(r);
+  }
+  // candidates()->remove(&incr_old_regions);
+
+  for (uint i = _cur_cset_length; i < _collection_set_cur_length; i++) {
+    log_info(gc) ("collection_set_regions[%u]: old_region[%u]", i, _collection_set_regions[i]);
+  }
+  // stop_incremental_building();
+}
+
 void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
   double non_young_start_time_sec = os::elapsedTime();
 
   if (collector_state()->in_mixed_phase()) {
+    log_info(gc) ("length of candidates: %u", candidates()->marking_regions_length());
     candidates()->verify();
 
     G1CollectionCandidateRegionList initial_old_regions;
@@ -371,6 +492,7 @@ void G1CollectionSet::prepare_optional_regions(G1CollectionCandidateRegionList* 
 
 void G1CollectionSet::finalize_initial_collection_set(double target_pause_time_ms, G1SurvivorRegions* survivor) {
   double time_remaining_ms = finalize_young_part(target_pause_time_ms, survivor);
+  finalize_incr_old_part();
   finalize_old_part(time_remaining_ms);
 }
 

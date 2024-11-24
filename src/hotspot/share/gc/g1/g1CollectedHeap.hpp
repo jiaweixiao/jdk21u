@@ -182,6 +182,7 @@ private:
 
   static size_t _humongous_object_threshold_in_words;
 
+public:
   // These sets keep track of old and humongous regions respectively.
   HeapRegionSet _old_set;
   HeapRegionSet _humongous_set;
@@ -201,7 +202,7 @@ public:
 
   void prepare_region_for_full_compaction(HeapRegion* hr);
 
-private:
+public:
   // Rebuilds the region sets / lists so that they are repopulated to
   // reflect the contents of the heap. The only exception is the
   // humongous set which was not torn down in the first place. If
@@ -1037,7 +1038,7 @@ public:
 
   inline bool is_in_cset_or_humongous_candidate(const oop obj);
 
- private:
+ public:
   // This array is used for a quick test on whether a reference points into
   // the collection set or not. Each of the array's elements denotes whether the
   // corresponding region is in the collection set or not.

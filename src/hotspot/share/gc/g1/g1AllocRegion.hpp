@@ -41,7 +41,7 @@ class G1CollectedHeap;
 
 class G1AllocRegion : public CHeapObj<mtGC> {
 
-private:
+public:
   // The active allocating region we are currently allocating out
   // of. The invariant is that if this object is initialized (i.e.,
   // init() has been called and release() has not) then _alloc_region
