@@ -651,6 +651,7 @@ void G1Policy::record_young_collection_start() {
 
 void G1Policy::record_concurrent_mark_init_end() {
   assert(!collector_state()->initiate_conc_mark_if_possible(), "we should have cleared it by now");
+  // log_info(gc)("gc start: record concurrent mark init end");
   collector_state()->set_in_concurrent_start_gc(false);
 }
 
@@ -1180,6 +1181,7 @@ bool G1Policy::force_concurrent_start_if_outside_cycle(GCCause::Cause gc_cause) 
 }
 
 void G1Policy::initiate_conc_mark() {
+  log_info(gc)("gc start: initiate_conc_mark");
   collector_state()->set_in_concurrent_start_gc(true);
   collector_state()->set_initiate_conc_mark_if_possible(false);
 }

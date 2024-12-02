@@ -482,6 +482,7 @@ void G1DirtyCardQueueSet::handle_refined_buffer(BufferNode* node,
 
 void G1DirtyCardQueueSet::handle_completed_buffer(BufferNode* new_node,
                                                   G1ConcurrentRefineStats* stats) {
+  // log_info(gc)("handle completed buffer");
   enqueue_completed_buffer(new_node);
 
   // No need for mutator refinement if number of cards is below limit.
@@ -504,6 +505,7 @@ void G1DirtyCardQueueSet::handle_completed_buffer(BufferNode* new_node,
 
   BufferNode* node = get_completed_buffer();
   if (node == nullptr) return;     // Didn't get a buffer to process.
+  // log_info(gc)("mutator refinement");
 
   // Refine cards in buffer.
 
@@ -519,10 +521,14 @@ bool G1DirtyCardQueueSet::refine_completed_buffer_concurrently(uint worker_id,
                                                                size_t stop_at,
                                                                G1ConcurrentRefineStats* stats) {
   // Not enough cards to trigger processing.
-  if (Atomic::load(&_num_cards) <= stop_at) return false;
+  if (Atomic::load(&_num_cards) <= stop_at){ 
+    // log_info(gc)("not enough cards");
+    return false;
+  }
 
   BufferNode* node = get_completed_buffer();
   if (node == nullptr) return false; // Didn't get a buffer to process.
+  // log_info(gc)("refine thread refinement");
 
   bool fully_processed = refine_buffer(node, worker_id, stats);
   handle_refined_buffer(node, fully_processed);

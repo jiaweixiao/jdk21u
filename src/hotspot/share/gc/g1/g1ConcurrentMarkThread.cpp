@@ -126,6 +126,7 @@ void G1ConcurrentMarkThread::run_service() {
     concurrent_cycle_start();
 
     if (_state == FullMark) {
+      // log_info(gc)("gc start: before do full mark");
       concurrent_mark_cycle_do();
     } else {
       assert(_state == UndoMark, "Must do undo mark but is %d", _state);

@@ -1002,65 +1002,6 @@ G1YoungCollector::G1YoungCollector(GCCause::Cause gc_cause) :
 {
 }
 
-class ScanRegionRemsetClosure;
-
-class ScanRemsetClosure : public G1CardSet::CardClosure {
-  ScanRegionRemsetClosure* _cl;
-  public:
-    ScanRemsetClosure(ScanRegionRemsetClosure* cl):_cl(cl){}
-    virtual void do_card(uint region_idx, uint card_idx);
-};
-
-class ScanRegionRemsetClosure : public HeapRegionClosure {
-  G1CollectedHeap* _g1h;
-  bool* _incoming_regions;
-  uint _num_regions;
-  LogStream _ls;
-  bool has_incoming = false;
-
-public:
-  // Typically called on each region until it returns true.
-  ScanRegionRemsetClosure(G1CollectedHeap* g1h):_ls(LogTarget(Info, gc, heap)()){
-    _g1h = g1h;
-    _num_regions = _g1h->num_regions();
-    _incoming_regions = NEW_C_HEAP_ARRAY(bool, _num_regions, mtGC);
-    
-    // for(uint i = 0; i < _num_regions; i++){
-    //   _incoming_regions[i] = false;
-    // }
-    // LogTarget(Info, gc, heap) lt;
-    // _ls = LogStream(lt);
-  }
-
-  ~ScanRegionRemsetClosure(){
-    FREE_C_HEAP_ARRAY(bool, _incoming_regions);
-  }
-
-  virtual bool do_heap_region(HeapRegion* r){
-    ScanRemsetClosure cl(this);
-    memset((void*)_incoming_regions, 0, sizeof(bool)*_num_regions);
-    has_incoming = false;
-    r->rem_set()->iterate_cards(cl);
-    if(has_incoming){
-      _ls.print("into Region %u", r->hrm_index());
-      _ls.print_cr("");
-    }
-    return false;
-  }
-
-  void do_incoming_region(uint region_idx){
-    has_incoming = true;
-    if(!_incoming_regions[region_idx]){
-      _ls.print("%u, ", region_idx);
-    }
-    _incoming_regions[region_idx] = true;
-  }
-};
-
-void ScanRemsetClosure::do_card(uint region_idx, uint card_idx){
-  _cl->do_incoming_region(region_idx);
-}
-
 void G1YoungCollector::collect() {
   // Do timing/tracing/statistics/pre- and post-logging/verification work not
   // directly related to the collection. They should not be accounted for in
@@ -1099,8 +1040,8 @@ void G1YoungCollector::collect() {
     // other trivial setup above).
     policy()->record_young_collection_start();
 
-    ScanRegionRemsetClosure cl(_g1h);
-    _g1h->heap_region_iterate(&cl);
+    log_info(gc)("before pre evac");
+    _g1h->rem_set()->log_remset();
 
     pre_evacuate_collection_set(jtm.evacuation_info());
 
@@ -1111,11 +1052,18 @@ void G1YoungCollector::collect() {
 
     bool may_do_optional_evacuation = collection_set()->optional_region_length() != 0;
     // Actually do the work...
+    log_info(gc)("before initial evac");
+     _g1h->rem_set()->log_remset();
     evacuate_initial_collection_set(&per_thread_states, may_do_optional_evacuation);
 
     if (may_do_optional_evacuation) {
+      log_info(gc)("before opt evac");
+     _g1h->rem_set()->log_remset();
       evacuate_optional_collection_set(&per_thread_states);
     }
+
+    log_info(gc)("before post evac");
+     _g1h->rem_set()->log_remset();
     post_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
 
     // Refine the type of a concurrent mark operation now that we did the
@@ -1127,6 +1075,8 @@ void G1YoungCollector::collect() {
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
 
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
+    log_info(gc)("before young gc end");
+    _g1h->rem_set()->log_remset();
   }
   TASKQUEUE_STATS_ONLY(_g1h->task_queues()->print_and_reset_taskqueue_stats("Oop Queue");)
 }

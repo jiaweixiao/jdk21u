@@ -59,7 +59,7 @@ void G1ConcurrentRefineThread::run_service() {
     SuspendibleThreadSetJoiner sts_join;
     G1ConcurrentRefineStats active_stats_start = _refinement_stats;
     report_active("Activated");
-    log_info(gc)("start refinement");
+    // log_info(gc)("start refinement");
     while (!should_terminate()) {
       if (sts_join.should_yield()) {
         report_inactive("Paused", _refinement_stats - active_stats_start);
@@ -71,6 +71,7 @@ void G1ConcurrentRefineThread::run_service() {
       } else if (maybe_deactivate()) {
         break;
       } else {
+        // log_info(gc)("before do refinement step");
         do_refinement_step();
       }
     }

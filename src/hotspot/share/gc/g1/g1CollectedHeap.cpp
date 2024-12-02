@@ -2573,6 +2573,8 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   _bytes_used_during_gc = 0;
 
   policy()->decide_on_concurrent_start_pause();
+  log_info(gc)("gc start: decide on finished");
+
   // Record whether this pause may need to trigger a concurrent operation. Later,
   // when we signal the G1ConcurrentMarkThread, the collector state has already
   // been reset for the next pause.
@@ -2584,6 +2586,8 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   // Perform the collection.
   G1YoungCollector collector(gc_cause());
   collector.collect();
+  log_info(gc)("gc start: finish collect");
+
   gc_majflt_stats.end_and_log("young");
 
   // It should now be safe to tell the concurrent mark thread to start
@@ -2597,6 +2601,8 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
     // Note: of course, the actual marking work will not start until the safepoint
     // itself is released in SuspendibleThreadSet::desynchronize().
     start_concurrent_cycle(collector.concurrent_operation_is_full_mark());
+    // log_info(gc)("gc start: start concurrent cycle");
+
     ConcurrentGCBreakpoints::notify_idle_to_active();
 
     if (G1UseSTWMarking) {
