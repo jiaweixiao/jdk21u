@@ -54,6 +54,21 @@ class nmethod;
 // sentinel value for hrm_index
 #define G1_NO_HRM_INDEX ((uint) -1)
 
+
+class HeapRegionConcMarkStats : public CHeapObj<mtGC> {
+private:
+  bool _in_marking_set;
+public:
+  HeapRegionConcMarkStats():_in_marking_set(false){}
+  bool is_in_marking_set(){
+    return _in_marking_set;
+  }
+
+  void set_in_marking_set(bool in_marking_set){
+    _in_marking_set = in_marking_set;
+  }
+}
+
 // A HeapRegion is the smallest piece of a G1CollectedHeap that
 // can be collected independently.
 
@@ -205,6 +220,8 @@ private:
   // The remembered set for this region.
   HeapRegionRemSet* _rem_set;
 
+  HeapRegionConcMarkStats* _conc_mark_stats;
+
   // Cached index of this region in the heap region sequence.
   const uint _hrm_index;
 
@@ -286,6 +303,8 @@ public:
   // If this region is a member of a HeapRegionManager, the index in that
   // sequence, otherwise -1.
   uint hrm_index() const { return _hrm_index; }
+
+  HeapRegionConcMarkStats* conc_mark_stats() const { return _conc_mark_stats; }
 
   // Initializing the HeapRegion not only resets the data structure, but also
   // resets the BOT for that heap region.

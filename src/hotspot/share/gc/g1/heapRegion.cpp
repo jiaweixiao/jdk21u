@@ -244,6 +244,7 @@ HeapRegion::HeapRegion(uint hrm_index,
          "invalid space boundaries");
 
   _rem_set = new HeapRegionRemSet(this, config);
+  _conc_mark_stats = new HeapRegionConcMarkStats();
   initialize();
 }
 
