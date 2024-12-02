@@ -43,14 +43,17 @@ void G1RemSetTrackingPolicy::update_at_allocate(HeapRegion* r) {
   if (r->is_young()) {
     // Always collect remembered set for young regions.
     r->rem_set()->set_state_complete();
-  } else if (r->is_humongous() || r->is_old()) {
+  } else if (r->is_humongous()) {
     // Collect remembered sets for humongous regions by default to allow eager reclaim.
     r->rem_set()->set_state_complete();
-  // } else if (r->is_old()) {
-  //   // By default, do not create remembered set for new old regions.
-  //   // r->rem_set()->set_state_untracked();
-  //   // add new
-  //   r->rem_set()->set_state_updating();
+  } else if (r->is_old()) {
+    // By default, do not create remembered set for new old regions.
+    // if (G1UseFullyTrack) {
+      r->rem_set()->set_state_complete();
+    // } else {
+    //   r->rem_set()->set_state_untracked();
+    // }
+    // r->rem_set()->set_state_untracked();
   } else {
     guarantee(false, "Unhandled region %u with heap region type %s", r->hrm_index(), r->get_type_str());
   }
@@ -61,7 +64,7 @@ void G1RemSetTrackingPolicy::update_at_free(HeapRegion* r) {
 }
 
 static void print_before_rebuild(HeapRegion* r, bool selected_for_rebuild, size_t total_live_bytes, size_t live_bytes) {
-  log_info(gc, remset, tracking)("Before rebuild region %u "
+  log_trace(gc, remset, tracking)("Before rebuild region %u "
                                   "(tams: " PTR_FORMAT ") "
                                   "total_live_bytes %zu "
                                   "selected %s "
@@ -150,7 +153,7 @@ void G1RemSetTrackingPolicy::update_after_rebuild(HeapRegion* r) {
                                          });
     }
     G1ConcurrentMark* cm = G1CollectedHeap::heap()->concurrent_mark();
-    log_info(gc, remset, tracking)("After rebuild %s region[%u] remset is %s"
+    log_trace(gc, remset, tracking)("After rebuild %s region[%u] remset is %s"
                                     "(tams " PTR_FORMAT " "
                                     "liveness %zu "
                                     "remset occ %zu "

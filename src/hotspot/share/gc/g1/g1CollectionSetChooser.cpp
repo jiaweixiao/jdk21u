@@ -159,8 +159,11 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
       } else if (r->is_old()) {
         log_info(gc) ("region[%u]->rem_set->clear", r->hrm_index());
         // Keep remembered sets for humongous regions, otherwise clean them out.
+        // if (!G1UseFullyTrack) {
+          // r->rem_set()->clear(true /* only_cardset */);
+        // }
         // r->rem_set()->clear(true /* only_cardset */);
-        r->rem_set()->set_state_complete();
+        // r->rem_set()->set_state_complete();
       } else {
         assert(!r->is_old() || !r->rem_set()->is_tracked(),
                "Missed to clear unused remembered set of region %u (%s) that is %s",
@@ -214,8 +217,11 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
           wasted_bytes + reclaimable > allowed_waste) {
         break;
       }
+      // if (!G1UseFullyTrack) {
+      //   r->rem_set()->clear(true /* cardset_only */);
+      // }
       // r->rem_set()->clear(true /* cardset_only */);
-      r->rem_set()->set_state_complete();
+      // r->rem_set()->set_state_complete();
 
       wasted_bytes += reclaimable;
       num_pruned++;

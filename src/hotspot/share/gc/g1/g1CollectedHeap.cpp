@@ -2589,6 +2589,7 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   // without its logging output interfering with the logging output
   // that came from the pause.
   if (should_start_concurrent_mark_operation) {
+  // if (false) {
     verifier()->verify_bitmap_clear(true /* above_tams_only */);
     // CAUTION: after the start_concurrent_cycle() call below, the concurrent marking
     // thread(s) could be running concurrently with us. Make sure that anything

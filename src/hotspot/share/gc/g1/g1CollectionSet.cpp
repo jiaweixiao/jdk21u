@@ -333,9 +333,7 @@ uint cur_region_index = 0;
 
 void G1CollectionSet::finalize_incr_old_part() {
   ResourceMark rm;
-  // if (collector_state()->in_mixed_phase() || _g1h->total_collections() < 20) {
-  // if (collector_state()->in_mixed_phase()) {
-  //   log_info(gc) ("Don't need to reclaim old regions incrementally during mixed gc");
+  // if (!collector_state()->in_mixed_phase()) {
   //   return;
   // }
   using CardValue = CardTable::CardValue;
@@ -363,24 +361,26 @@ void G1CollectionSet::finalize_incr_old_part() {
   // }
 
   // problem 2
-  for (uint i = 0; i < len; i++) {
+  for (uint i = cur_region_index; i < len; i++) {
     // log_info(gc) ("cur_region_index: %u", cur_region_index);
     if (!hrm.is_available(i)) {
       continue;
     }
     auto r = hrm.at(i);
     // if (r->is_old() && candidates()->contains(r)) {
+    if (r->is_old() && r->rem_set()->is_complete() && !G1CollectedHeap::heap()->is_old_gc_alloc_region(r)) {
     // if (r->is_old() && r->rem_set()->is_complete()) {
-    if (r->is_old()) {
+    // if (r->is_old()) {
       // todo add this region to current collection
       log_info(gc) ("%s region[%u]'s remset is %s (in candidates? %s)", r->get_type_str(), r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
       r_to_visit.push(r->hrm_index());
       r_visited.insert(r->hrm_index());
       count++;
+      // cur_region_index = (cur_region_index + 1) % len;
       // incr_old_regions.append(r);
       // break;
     }
-    if (count == 50) break;
+    if (count == 5) break;
   }
   G1RemSet * rset = _g1h->rem_set();
   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
@@ -412,7 +412,7 @@ void G1CollectionSet::finalize_incr_old_part() {
       auto r = hrm.at(*res);
       auto rr = r->is_old();
       log_info(gc) ("is_old: %d, %u", rr, *res);
-      if (!candidates()->contains(r)) {
+      if (!candidates()->contains(r) ) {
         incr_old_regions.append(r);
       }
     }
