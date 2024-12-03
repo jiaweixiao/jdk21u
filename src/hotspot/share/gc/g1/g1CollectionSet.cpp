@@ -333,10 +333,13 @@ uint cur_region_index = 0;
 
 void G1CollectionSet::finalize_incr_old_part() {
   ResourceMark rm;
-  // if (!collector_state()->in_mixed_phase()) {
-  //   return;
-  // }
-  using CardValue = CardTable::CardValue;
+  // Reclaiming old regions during Concurrent Marking will violate the SATB assumption. 
+  // e.g. After an object belonging to an old region is marked, that old region is reclaimed.
+  if (_g1h->concurrent_mark()->in_progress()) {
+    log_info(gc) ("Concurrent Marking is in progress!");
+    return;
+  }
+  // using CardValue = CardTable::CardValue;
   G1CollectionCandidateRegionList incr_old_regions;
 
   auto &hrm = _g1h->_hrm;
@@ -346,21 +349,6 @@ void G1CollectionSet::finalize_incr_old_part() {
   LinkedListSet<uint> r_visited;
   size_t count = 0;
 
-  //   for (uint i = 0; i < len; i++) {
-  //   if (!hrm.is_available(i)) {
-  //     continue;
-  //   }
-  //   auto r = hrm.at(i);
-  //   // if (r->is_old() && candidates()->contains(r)) {
-  //   if (r->is_old()) {
-  //     // todo add this region to current collection
-  //     log_info(gc) ("Old region[%u]'s remset is %s (in candidates? %s)", r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
-  //   } else if (r->is_free()) {
-  //     log_info(gc) ("Free region[%u]'s remset is %s (in candidates? %s)", r->hrm_index(), r->rem_set()->get_state_str(), BOOL_TO_STR(candidates()->contains(r)));
-  //   }
-  // }
-
-  // problem 2
   for (uint i = cur_region_index; i < len; i++) {
     // log_info(gc) ("cur_region_index: %u", cur_region_index);
     if (!hrm.is_available(i)) {
@@ -386,24 +374,6 @@ void G1CollectionSet::finalize_incr_old_part() {
   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
   rset->build_old_union(r_to_visit, r_visited);
   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
-
-  // if (candidates()->marking_regions().length() != 0) {
-  //   G1CollectionCandidateListIterator iter = candidates()->marking_regions().begin();
-  //   for (; iter != candidates()->marking_regions().end(); ++iter) {
-  //     HeapRegion* hr = *iter;
-  //     log_info(gc) ("[yyz] From candidates: %u", hr->hrm_index());
-  //     r_to_visit.push(hr->hrm_index());
-  //     r_visited.insert(hr->hrm_index());
-  //     incr_old_regions.append(hr);
-  //     count++;
-  //     if (count == 8) break;
-  //   }
-    
-  //   G1RemSet * rset = _g1h->rem_set();
-  //   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
-  //   rset->build_old_union(r_to_visit, r_visited);
-  //   log_info(gc) ("length of r_to_visit %lu, length of r_visited %lu", r_to_visit.size(), r_visited.size());
-  // }
 
   LinkedListIterator<uint> it(r_visited.head());
   while (!it.is_empty()) {
