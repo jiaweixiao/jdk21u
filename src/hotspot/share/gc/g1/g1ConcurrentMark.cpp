@@ -999,6 +999,8 @@ void G1ConcurrentMark::root_region_scan_abort_and_wait() {
   root_regions()->wait_until_scan_finished();
 }
 
+// static unsigned long _start_majflt = 0;
+
 void G1ConcurrentMark::concurrent_cycle_start() {
   _gc_timer_cm->register_gc_start();
 

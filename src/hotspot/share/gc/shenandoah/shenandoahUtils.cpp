@@ -38,6 +38,8 @@
 
 ShenandoahPhaseTimings::Phase ShenandoahTimingsTracker::_current_phase = ShenandoahPhaseTimings::_invalid_phase;
 
+// static unsigned long _start_majflt = 0;
+
 ShenandoahGCSession::ShenandoahGCSession(GCCause::Cause cause) :
   _heap(ShenandoahHeap::heap()),
   _timer(_heap->gc_timer()),
@@ -47,6 +49,7 @@ ShenandoahGCSession::ShenandoahGCSession(GCCause::Cause cause) :
   _heap->set_gc_cause(cause);
   _timer->register_gc_start();
   _tracer->report_gc_start(cause, _timer->gc_start());
+
   _heap->trace_heap_before_gc(_tracer);
 
   _heap->shenandoah_policy()->record_cycle_start();
@@ -70,6 +73,7 @@ ShenandoahGCSession::~ShenandoahGCSession() {
   _heap->trace_heap_after_gc(_tracer);
   _tracer->report_gc_reference_stats(_heap->ref_processor()->reference_process_stats());
   _tracer->report_gc_end(_timer->gc_end(), _timer->time_partitions());
+
   assert(!ShenandoahGCPhase::is_current_phase_valid(), "No current GC phase");
   _heap->set_gc_cause(GCCause::_no_gc);
 }

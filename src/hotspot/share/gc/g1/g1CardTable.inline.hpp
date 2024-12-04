@@ -73,6 +73,7 @@ inline void G1CardTable::mark_range_dirty(size_t start_card_index, size_t num_ca
 }
 
 inline void G1CardTable::change_dirty_cards_to(CardValue* start_card, CardValue* end_card, CardValue which) {
+  // [yyz]
   for (CardValue* i_card = start_card; i_card < end_card; ++i_card) {
     CardValue value = *i_card;
     assert(value == dirty_card_val(),

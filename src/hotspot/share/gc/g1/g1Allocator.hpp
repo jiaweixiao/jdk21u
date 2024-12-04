@@ -39,7 +39,7 @@ class G1NUMA;
 class G1Allocator : public CHeapObj<mtGC> {
   friend class VMStructs;
 
-private:
+public:
   G1CollectedHeap* _g1h;
   G1NUMA* _numa;
 

@@ -837,9 +837,24 @@ jint universe_init() {
 
 jint Universe::initialize_heap() {
   assert(_collectedHeap == nullptr, "Heap already created");
+
+  // [gc breakdown]
+  long majflt, minflt;
+  os::get_accum_majflt_minflt(&majflt, &minflt);
+  log_info(gc)("Majflt(init heap)=%ld", majflt);
+  log_info(gc)("Minflt(init heap)=%ld", minflt);
+  os::dump_accum_thread_majflt_minflt_and_cputime("Init heap");
+
   _collectedHeap = GCConfig::arguments()->create_heap();
 
   log_info(gc)("Using %s", _collectedHeap->name());
+  if (UseParallelFullScavengeGC) {
+    log_info(gc)("Using full heap scavenge gc");
+  }
+  if (UseParallelFullMarkCompactGC) {
+    log_info(gc)("Using full heap mark compact gc");
+  }
+
   return _collectedHeap->initialize();
 }
 

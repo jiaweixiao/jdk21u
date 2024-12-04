@@ -122,6 +122,7 @@ void G1ConcurrentMarkThread::run_service() {
     FormatBuffer<128> title("Concurrent %s Cycle", _state == FullMark ? "Mark" : "Undo");
     GCTraceConcTime(Info, gc) tt(title);
 
+    os::dump_accum_thread_majflt_minflt_and_cputime("beforeConcCycle");
     concurrent_cycle_start();
 
     if (_state == FullMark) {
@@ -132,6 +133,7 @@ void G1ConcurrentMarkThread::run_service() {
     }
 
     concurrent_cycle_end(_state == FullMark && !_cm->has_aborted());
+    os::dump_accum_thread_majflt_minflt_and_cputime("afterConcCycle");
 
     _vtime_accum = (os::elapsedVTime() - _vtime_start);
   }
@@ -189,7 +191,11 @@ bool G1ConcurrentMarkThread::phase_mark_loop() {
     if (subphase_delay_to_keep_mmu_before_remark()) return true;
 
     // Subphase 4: Remark pause
+    // [gc breakdown]
+    GCMajfltStats gc_majflt_stats;
+    gc_majflt_stats.start();
     if (subphase_remark()) return true;
+    gc_majflt_stats.end_and_log("remark");
 
     // Check if we need to restart the marking loop.
     if (!mark_loop_needs_restart()) break;
@@ -261,6 +267,7 @@ bool G1ConcurrentMarkThread::phase_clear_bitmap_for_next_mark() {
 
 void G1ConcurrentMarkThread::concurrent_cycle_start() {
   _cm->concurrent_cycle_start();
+  _cm->_in_progress = true;
 }
 
 void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
@@ -297,7 +304,11 @@ void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
   if (phase_delay_to_keep_mmu_before_cleanup()) return;
 
   // Phase 5: Cleanup pause
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   if (phase_cleanup()) return;
+  gc_majflt_stats.end_and_log("cleanup");
 
   // Phase 6: Clear CLD claimed marks.
   if (phase_clear_cld_claimed_marks()) return;
@@ -325,6 +336,7 @@ void G1ConcurrentMarkThread::concurrent_undo_cycle_do() {
 
 void G1ConcurrentMarkThread::concurrent_cycle_end(bool mark_cycle_completed) {
   ConcurrentGCBreakpoints::at("BEFORE CLEANUP COMPLETED");
+  _cm->_in_progress = false;
   // Update the number of full collections that have been
   // completed. This will also notify the G1OldGCCount_lock in case a
   // Java thread is waiting for a full GC to happen (e.g., it

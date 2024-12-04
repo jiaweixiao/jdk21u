@@ -240,9 +240,9 @@ bool PSScavenge::invoke() {
   IsGCActiveMark mark;
 
   const bool scavenge_done = PSScavenge::invoke_no_policy();
-  const bool need_full_gc = !scavenge_done ||
-    policy->should_full_GC(heap->old_gen()->free_in_bytes());
-  bool full_gc_done = false;
+  const bool need_full_gc = !UseParallelFullScavengeGC && (!scavenge_done ||
+    policy->should_full_GC(heap->old_gen()->free_in_bytes()));
+  bool full_gc_done = !UseParallelFullScavengeGC ? false : scavenge_done;
 
   if (UsePerfData) {
     PSGCAdaptivePolicyCounters* const counters = heap->gc_policy_counters();
@@ -360,6 +360,10 @@ bool PSScavenge::invoke_no_policy() {
   assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
 
   _gc_timer.register_gc_start();
+
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
 
   if (GCLocker::check_active_before_gc()) {
     return false;
@@ -664,11 +668,19 @@ bool PSScavenge::invoke_no_policy() {
   heap->print_heap_after_gc();
   heap->trace_heap_after_gc(&_gc_tracer);
 
+  if (UseParallelFullScavengeGC) {
+    // Update heap occupancy information which is used as input to the soft ref
+    // clearing policy at the next gc.
+    heap->update_capacity_and_used_at_gc();
+  }
+
   AdaptiveSizePolicyOutput::print(size_policy, heap->total_collections());
 
   _gc_timer.register_gc_end();
 
   _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
+
+  gc_majflt_stats.end_and_log("young");
 
   return !promotion_failure_occurred;
 }

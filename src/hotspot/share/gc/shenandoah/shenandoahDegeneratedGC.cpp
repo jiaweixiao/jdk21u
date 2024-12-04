@@ -48,7 +48,11 @@ ShenandoahDegenGC::ShenandoahDegenGC(ShenandoahDegenPoint degen_point) :
 }
 
 bool ShenandoahDegenGC::collect(GCCause::Cause cause) {
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   vmop_degenerated();
+  gc_majflt_stats.end_and_log("degenerated gc");
   return true;
 }
 

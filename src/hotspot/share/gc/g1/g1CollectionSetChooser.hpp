@@ -45,6 +45,7 @@ public:
 
   static bool region_occupancy_low_enough_for_evac(size_t live_bytes) {
     return live_bytes < mixed_gc_live_threshold_bytes();
+    // return true;
   }
 
   // Determine whether to add the given region to the collection set candidates or

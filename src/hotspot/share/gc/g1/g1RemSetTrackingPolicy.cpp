@@ -22,8 +22,10 @@
  *
  */
 
+#include "logging/log.hpp"
 #include "precompiled.hpp"
 #include "gc/g1/g1CollectionSetChooser.hpp"
+#include "gc/g1/g1CollectionSet.hpp"
 #include "gc/g1/g1RemSetTrackingPolicy.hpp"
 #include "gc/g1/heapRegion.inline.hpp"
 #include "gc/g1/heapRegionRemSet.inline.hpp"
@@ -46,7 +48,12 @@ void G1RemSetTrackingPolicy::update_at_allocate(HeapRegion* r) {
     r->rem_set()->set_state_complete();
   } else if (r->is_old()) {
     // By default, do not create remembered set for new old regions.
-    r->rem_set()->set_state_untracked();
+    // if (G1UseFullyTrack) {
+      r->rem_set()->set_state_complete();
+    // } else {
+    //   r->rem_set()->set_state_untracked();
+    // }
+    // r->rem_set()->set_state_untracked();
   } else {
     guarantee(false, "Unhandled region %u with heap region type %s", r->hrm_index(), r->get_type_str());
   }
@@ -146,12 +153,14 @@ void G1RemSetTrackingPolicy::update_after_rebuild(HeapRegion* r) {
                                          });
     }
     G1ConcurrentMark* cm = G1CollectedHeap::heap()->concurrent_mark();
-    log_trace(gc, remset, tracking)("After rebuild region %u "
+    log_trace(gc, remset, tracking)("After rebuild %s region[%u] remset is %s"
                                     "(tams " PTR_FORMAT " "
                                     "liveness %zu "
                                     "remset occ %zu "
                                     "size %zu)",
+                                    r->get_type_str(),
                                     r->hrm_index(),
+                                    r->rem_set()->get_state_str(),
                                     p2i(r->top_at_mark_start()),
                                     cm->live_bytes(r->hrm_index()),
                                     r->rem_set()->occupied(),

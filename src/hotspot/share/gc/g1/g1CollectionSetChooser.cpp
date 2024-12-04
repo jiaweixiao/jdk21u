@@ -22,6 +22,7 @@
  *
  */
 
+#include "logging/log.hpp"
 #include "precompiled.hpp"
 #include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1CollectionSetCandidates.hpp"
@@ -148,14 +149,21 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
       _regions_added(0) { }
 
     bool do_heap_region(HeapRegion* r) {
+      log_info(gc) ("%s region[%u]'s remset state: %s", r->get_type_str(), r->hrm_index(), r->rem_set()->get_state_str());
       // We will skip any region that's currently used as an old GC
       // alloc region (we should not consider those for collection
       // before we fill them up).
       if (should_add(r) && !G1CollectedHeap::heap()->is_old_gc_alloc_region(r)) {
+        log_info(gc) ("add_region[%u]", r->hrm_index());
         add_region(r);
       } else if (r->is_old()) {
+        log_info(gc) ("region[%u]->rem_set->clear", r->hrm_index());
         // Keep remembered sets for humongous regions, otherwise clean them out.
-        r->rem_set()->clear(true /* only_cardset */);
+        // if (!G1UseFullyTrack) {
+          // r->rem_set()->clear(true /* only_cardset */);
+        // }
+        // r->rem_set()->clear(true /* only_cardset */);
+        // r->rem_set()->set_state_complete();
       } else {
         assert(!r->is_old() || !r->rem_set()->is_tracked(),
                "Missed to clear unused remembered set of region %u (%s) that is %s",
@@ -209,7 +217,11 @@ class G1BuildCandidateRegionsTask : public WorkerTask {
           wasted_bytes + reclaimable > allowed_waste) {
         break;
       }
-      r->rem_set()->clear(true /* cardset_only */);
+      // if (!G1UseFullyTrack) {
+      //   r->rem_set()->clear(true /* cardset_only */);
+      // }
+      // r->rem_set()->clear(true /* cardset_only */);
+      // r->rem_set()->set_state_complete();
 
       wasted_bytes += reclaimable;
       num_pruned++;

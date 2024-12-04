@@ -921,6 +921,10 @@ bool G1CollectedHeap::do_full_collection(bool clear_all_soft_refs,
     return false;
   }
 
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
+
   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
       soft_ref_policy()->should_clear_all_soft_refs();
 
@@ -932,6 +936,8 @@ bool G1CollectedHeap::do_full_collection(bool clear_all_soft_refs,
   collector.collect();
   collector.complete_collection();
 
+  gc_majflt_stats.end_and_log("full");
+
   // Full collection was successfully completed.
   return true;
 }
@@ -940,7 +946,6 @@ void G1CollectedHeap::do_full_collection(bool clear_all_soft_refs) {
   // Currently, there is no facility in the do_full_collection(bool) API to notify
   // the caller that the collection did not succeed (e.g., because it was locked
   // out by the GC locker). So, right now, we'll ignore the return value.
-
   do_full_collection(clear_all_soft_refs,
                      false /* do_maximal_compaction */);
 }
@@ -2523,12 +2528,13 @@ G1HeapPrinterMark::~G1HeapPrinterMark() {
   _g1h->numa()->print_statistics();
 }
 
+static unsigned long _start_majflt = 0;
+
 G1JFRTracerMark::G1JFRTracerMark(STWGCTimer* timer, GCTracer* tracer) :
   _timer(timer), _tracer(tracer) {
 
   _timer->register_gc_start();
   _tracer->report_gc_start(G1CollectedHeap::heap()->gc_cause(), _timer->gc_start());
-  G1CollectedHeap::heap()->trace_heap_before_gc(_tracer);
 }
 
 G1JFRTracerMark::~G1JFRTracerMark() {
@@ -2571,14 +2577,19 @@ void G1CollectedHeap::do_collection_pause_at_safepoint_helper() {
   // been reset for the next pause.
   bool should_start_concurrent_mark_operation = collector_state()->in_concurrent_start_gc();
 
+  // [gc breakdown]
+  GCMajfltStats gc_majflt_stats;
+  gc_majflt_stats.start();
   // Perform the collection.
   G1YoungCollector collector(gc_cause());
   collector.collect();
+  gc_majflt_stats.end_and_log("young");
 
   // It should now be safe to tell the concurrent mark thread to start
   // without its logging output interfering with the logging output
   // that came from the pause.
   if (should_start_concurrent_mark_operation) {
+  // if (false) {
     verifier()->verify_bitmap_clear(true /* above_tams_only */);
     // CAUTION: after the start_concurrent_cycle() call below, the concurrent marking
     // thread(s) could be running concurrently with us. Make sure that anything

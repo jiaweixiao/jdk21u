@@ -51,6 +51,10 @@ class PSOldGen : public CHeapObj<mtGC> {
   // Block size for parallel iteration
   static const size_t IterateBlockSize = 1024 * 1024;
 
+  // Record old gen usage at the end of full gc.
+  // Used to get the size of space that used by new allocated objects in old gen between full gcs.
+  size_t _used_in_bytes_last_full_gc;
+
 #ifdef ASSERT
   void assert_block_in_covered_region(MemRegion new_memregion) {
     // Explicitly capture current covered_region in a local
@@ -134,6 +138,9 @@ class PSOldGen : public CHeapObj<mtGC> {
   size_t capacity_in_words() const        { return object_space()->capacity_in_words(); }
   size_t used_in_words() const            { return object_space()->used_in_words(); }
   size_t free_in_words() const            { return object_space()->free_in_words(); }
+
+  void record_used_at_full_gc();
+  size_t used_in_bytes_since_last_full_gc() const { return object_space()->used_in_bytes() - _used_in_bytes_last_full_gc; }
 
   bool is_maximal_no_gc() const {
     return virtual_space()->uncommitted_size() == 0;

@@ -169,9 +169,9 @@ inline oop PSPromotionManager::copy_unmarked_to_survivor_space(oop o,
   uint age = (test_mark.has_displaced_mark_helper() /* o->has_displaced_mark() */) ?
       test_mark.displaced_mark_helper().age() : test_mark.age();
 
-  if (!promote_immediately) {
+  if (UseParallelFullScavengeGC || !promote_immediately) {
     // Try allocating obj in to-space (unless too old)
-    if (age < PSScavenge::tenuring_threshold()) {
+    if (UseParallelFullScavengeGC || age < PSScavenge::tenuring_threshold()) {
       new_obj = cast_to_oop(_young_lab.allocate(new_obj_size));
       if (new_obj == nullptr && !_young_gen_is_full) {
         // Do we allocate directly, or flush and refill?
@@ -199,6 +199,12 @@ inline oop PSPromotionManager::copy_unmarked_to_survivor_space(oop o,
 
   // Otherwise try allocating obj tenured
   if (new_obj == nullptr) {
+    // Disable allocating obj tenured by throwing oom error
+    if (UseParallelFullScavengeGC) {
+      _old_gen_is_full = true;
+      return oop_promotion_failed(o, test_mark);
+    }
+
 #ifndef PRODUCT
     if (ParallelScavengeHeap::heap()->promotion_should_fail()) {
       return oop_promotion_failed(o, test_mark);
@@ -261,7 +267,7 @@ inline oop PSPromotionManager::copy_unmarked_to_survivor_space(oop o,
     // Increment age if obj still in new generation. Now that
     // we're dealing with a markWord that cannot change, it is
     // okay to use the non mt safe oop methods.
-    if (!new_obj_is_tenured) {
+    if (!UseParallelFullScavengeGC && !new_obj_is_tenured) {
       new_obj->incr_age();
       assert(young_space()->contains(new_obj), "Attempt to push non-promoted obj");
     }

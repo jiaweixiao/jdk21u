@@ -360,6 +360,11 @@ class G1ConcurrentMark : public CHeapObj<mtGC> {
   uint      _num_concurrent_workers; // The number of marking worker threads we're using
   uint      _max_concurrent_workers; // Maximum number of marking worker threads
 
+public:
+  bool _in_progress;
+
+  bool in_progress() { return _in_progress; }
+  
   enum class VerifyLocation {
     RemarkBefore,
     RemarkAfter,

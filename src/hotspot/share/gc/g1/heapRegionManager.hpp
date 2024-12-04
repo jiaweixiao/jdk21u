@@ -77,6 +77,7 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   G1RegionToSpaceMapper* _bot_mapper;
   G1RegionToSpaceMapper* _cardtable_mapper;
 
+public:
   // Keeps track of the currently committed regions in the heap. The committed regions
   // can either be active (ready for use) or inactive (ready for uncommit).
   G1CommittedRegionMap _committed_map;
