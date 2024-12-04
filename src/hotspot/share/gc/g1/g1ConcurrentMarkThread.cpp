@@ -276,6 +276,7 @@ bool G1ConcurrentMarkThread::phase_clear_bitmap_for_next_mark() {
 
 void G1ConcurrentMarkThread::concurrent_cycle_start() {
   _cm->concurrent_cycle_start();
+  _cm->_in_progress = true;
 }
 
 void G1ConcurrentMarkThread::concurrent_mark_cycle_do() {
@@ -344,6 +345,7 @@ void G1ConcurrentMarkThread::concurrent_undo_cycle_do() {
 
 void G1ConcurrentMarkThread::concurrent_cycle_end(bool mark_cycle_completed) {
   ConcurrentGCBreakpoints::at("BEFORE CLEANUP COMPLETED");
+  _cm->_in_progress = false;
   // Update the number of full collections that have been
   // completed. This will also notify the G1OldGCCount_lock in case a
   // Java thread is waiting for a full GC to happen (e.g., it

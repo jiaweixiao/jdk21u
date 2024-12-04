@@ -114,6 +114,9 @@
   product(bool, G1UseSTWMarking, false,                                     \
           "Use stop-the-world-concurrent marking")                          \
                                                                             \
+  product(bool, G1UseFullyTrack, false,                                          \
+          "Track all old gens")                                             \
+                                                                            \
   product(size_t, G1AdaptiveIHOPNumInitialSamples, 3, EXPERIMENTAL,         \
           "How many completed time periods from concurrent start to first " \
           "mixed gc are required to use the input values for prediction "   \

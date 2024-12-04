@@ -32,8 +32,11 @@
 #include "gc/g1/heapRegion.hpp"
 #include "memory/allocation.hpp"
 #include "memory/iterator.hpp"
+#include "utilities/linkedlist.hpp"
 #include "utilities/ticks.hpp"
 #include "logging/logStream.hpp"
+#include <queue>
+#include <unordered_set>
 
 // A G1RemSet provides ways of iterating over pointers into a selected
 // collection set.
@@ -60,7 +63,7 @@ class G1RemSet: public CHeapObj<mtGC> {
 public:
   typedef CardTable::CardValue CardValue;
 
-private:
+public:
   G1RemSetScanState* _scan_state;
 
   G1RemSetSummary _prev_period_summary;
@@ -90,6 +93,8 @@ public:
                        G1GCPhaseTimes::GCParPhases scan_phase,
                        G1GCPhaseTimes::GCParPhases objcopy_phase,
                        bool remember_already_scanned_cards);
+
+  void build_old_union(LinkedListQueue<uint>& r_q, LinkedListSet<uint> & r_set);
 
   // Merge cards from various sources (remembered sets, log buffers)
   // and calculate the cards that need to be scanned later (via scan_heap_roots()).

@@ -22,6 +22,10 @@
  *
  */
 
+#include "gc/g1/g1Allocator.hpp"
+#include "gc/g1/heapRegion.hpp"
+#include "gc/shared/cardTable.hpp"
+#include "logging/log.hpp"
 #include "precompiled.hpp"
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BatchedTask.hpp"
@@ -59,7 +63,111 @@
 #include "utilities/stack.inline.hpp"
 #include "utilities/ticks.hpp"
 #include "logging/logStream.hpp"
+#include "unordered_set"
+#include "queue"
+#include <cstddef>
+#include <queue>
+#include <unordered_set>
 #include CPU_HEADER(gc/g1/g1Globals)
+
+  // To locate consecutive dirty cards inside a chunk.
+  class ChunkScanner {
+    using CardValue = CardTable::CardValue;
+    using Word = size_t;
+
+    CardValue* const _start_card;
+    CardValue* const _end_card;
+
+    static const size_t ExpandedToScanMask = G1CardTable::WordAlreadyScanned;
+    static const size_t ToScanMask = G1CardTable::g1_card_already_scanned;
+
+    static bool is_card_dirty(const CardValue* const card) {
+      return (*card & ToScanMask) == 0;
+    }
+
+    static bool is_word_aligned(const void* const addr) {
+      return ((uintptr_t)addr) % sizeof(Word) == 0;
+    }
+
+    CardValue* find_first_dirty_card(CardValue* i_card) const {
+      while (!is_word_aligned(i_card)) {
+        if (is_card_dirty(i_card)) {
+          return i_card;
+        }
+        i_card++;
+      }
+
+      for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
+        Word word_value = *reinterpret_cast<Word*>(i_card);
+        bool has_dirty_cards_in_word = (~word_value & ExpandedToScanMask) != 0;
+
+        if (has_dirty_cards_in_word) {
+          for (uint i = 0; i < sizeof(Word); ++i) {
+            if (is_card_dirty(i_card)) {
+              return i_card;
+            }
+            i_card++;
+          }
+          assert(false, "should have early-returned");
+        }
+      }
+
+      return _end_card;
+    }
+
+    CardValue* find_first_non_dirty_card(CardValue* i_card) const {
+      while (!is_word_aligned(i_card)) {
+        if (!is_card_dirty(i_card)) {
+          return i_card;
+        }
+        i_card++;
+      }
+
+      for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
+        Word word_value = *reinterpret_cast<Word*>(i_card);
+        bool all_cards_dirty = (word_value == G1CardTable::WordAllDirty);
+
+        if (!all_cards_dirty) {
+          for (uint i = 0; i < sizeof(Word); ++i) {
+            if (!is_card_dirty(i_card)) {
+              return i_card;
+            }
+            i_card++;
+          }
+          assert(false, "should have early-returned");
+        }
+      }
+
+      return _end_card;
+    }
+
+  public:
+    ChunkScanner(CardValue* const start_card, CardValue* const end_card) :
+      _start_card(start_card),
+      _end_card(end_card) {
+        assert(is_word_aligned(start_card), "precondition");
+        assert(is_word_aligned(end_card), "precondition");
+      }
+
+    template<typename Func>
+    void on_dirty_cards(Func&& f) {
+      for (CardValue* cur_card = _start_card; cur_card < _end_card; /* empty */) {
+        CardValue* dirty_l = find_first_dirty_card(cur_card);
+        CardValue* dirty_r = find_first_non_dirty_card(dirty_l);
+
+        assert(dirty_l <= dirty_r, "inv");
+
+        if (dirty_l == dirty_r) {
+          assert(dirty_r == _end_card, "finished the entire chunk");
+          return;
+        }
+
+        f(dirty_l, dirty_r);
+
+        cur_card = dirty_r + 1;
+      }
+    }
+  };
 
 // Collects information about the overall heap root scan progress during an evacuation.
 //
@@ -565,103 +673,103 @@ class G1ScanHRForRegionClosure : public HeapRegionClosure {
     _cards_scanned += num_cards;
   }
 
-  // To locate consecutive dirty cards inside a chunk.
-  class ChunkScanner {
-    using Word = size_t;
+  // // To locate consecutive dirty cards inside a chunk.
+  // class ChunkScanner {
+  //   using Word = size_t;
 
-    CardValue* const _start_card;
-    CardValue* const _end_card;
+  //   CardValue* const _start_card;
+  //   CardValue* const _end_card;
 
-    static const size_t ExpandedToScanMask = G1CardTable::WordAlreadyScanned;
-    static const size_t ToScanMask = G1CardTable::g1_card_already_scanned;
+  //   static const size_t ExpandedToScanMask = G1CardTable::WordAlreadyScanned;
+  //   static const size_t ToScanMask = G1CardTable::g1_card_already_scanned;
 
-    static bool is_card_dirty(const CardValue* const card) {
-      return (*card & ToScanMask) == 0;
-    }
+  //   static bool is_card_dirty(const CardValue* const card) {
+  //     return (*card & ToScanMask) == 0;
+  //   }
 
-    static bool is_word_aligned(const void* const addr) {
-      return ((uintptr_t)addr) % sizeof(Word) == 0;
-    }
+  //   static bool is_word_aligned(const void* const addr) {
+  //     return ((uintptr_t)addr) % sizeof(Word) == 0;
+  //   }
 
-    CardValue* find_first_dirty_card(CardValue* i_card) const {
-      while (!is_word_aligned(i_card)) {
-        if (is_card_dirty(i_card)) {
-          return i_card;
-        }
-        i_card++;
-      }
+  //   CardValue* find_first_dirty_card(CardValue* i_card) const {
+  //     while (!is_word_aligned(i_card)) {
+  //       if (is_card_dirty(i_card)) {
+  //         return i_card;
+  //       }
+  //       i_card++;
+  //     }
 
-      for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
-        Word word_value = *reinterpret_cast<Word*>(i_card);
-        bool has_dirty_cards_in_word = (~word_value & ExpandedToScanMask) != 0;
+  //     for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
+  //       Word word_value = *reinterpret_cast<Word*>(i_card);
+  //       bool has_dirty_cards_in_word = (~word_value & ExpandedToScanMask) != 0;
 
-        if (has_dirty_cards_in_word) {
-          for (uint i = 0; i < sizeof(Word); ++i) {
-            if (is_card_dirty(i_card)) {
-              return i_card;
-            }
-            i_card++;
-          }
-          assert(false, "should have early-returned");
-        }
-      }
+  //       if (has_dirty_cards_in_word) {
+  //         for (uint i = 0; i < sizeof(Word); ++i) {
+  //           if (is_card_dirty(i_card)) {
+  //             return i_card;
+  //           }
+  //           i_card++;
+  //         }
+  //         assert(false, "should have early-returned");
+  //       }
+  //     }
 
-      return _end_card;
-    }
+  //     return _end_card;
+  //   }
 
-    CardValue* find_first_non_dirty_card(CardValue* i_card) const {
-      while (!is_word_aligned(i_card)) {
-        if (!is_card_dirty(i_card)) {
-          return i_card;
-        }
-        i_card++;
-      }
+  //   CardValue* find_first_non_dirty_card(CardValue* i_card) const {
+  //     while (!is_word_aligned(i_card)) {
+  //       if (!is_card_dirty(i_card)) {
+  //         return i_card;
+  //       }
+  //       i_card++;
+  //     }
 
-      for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
-        Word word_value = *reinterpret_cast<Word*>(i_card);
-        bool all_cards_dirty = (word_value == G1CardTable::WordAllDirty);
+  //     for (/* empty */; i_card < _end_card; i_card += sizeof(Word)) {
+  //       Word word_value = *reinterpret_cast<Word*>(i_card);
+  //       bool all_cards_dirty = (word_value == G1CardTable::WordAllDirty);
 
-        if (!all_cards_dirty) {
-          for (uint i = 0; i < sizeof(Word); ++i) {
-            if (!is_card_dirty(i_card)) {
-              return i_card;
-            }
-            i_card++;
-          }
-          assert(false, "should have early-returned");
-        }
-      }
+  //       if (!all_cards_dirty) {
+  //         for (uint i = 0; i < sizeof(Word); ++i) {
+  //           if (!is_card_dirty(i_card)) {
+  //             return i_card;
+  //           }
+  //           i_card++;
+  //         }
+  //         assert(false, "should have early-returned");
+  //       }
+  //     }
 
-      return _end_card;
-    }
+  //     return _end_card;
+  //   }
 
-  public:
-    ChunkScanner(CardValue* const start_card, CardValue* const end_card) :
-      _start_card(start_card),
-      _end_card(end_card) {
-        assert(is_word_aligned(start_card), "precondition");
-        assert(is_word_aligned(end_card), "precondition");
-      }
+  // public:
+  //   ChunkScanner(CardValue* const start_card, CardValue* const end_card) :
+  //     _start_card(start_card),
+  //     _end_card(end_card) {
+  //       assert(is_word_aligned(start_card), "precondition");
+  //       assert(is_word_aligned(end_card), "precondition");
+  //     }
 
-    template<typename Func>
-    void on_dirty_cards(Func&& f) {
-      for (CardValue* cur_card = _start_card; cur_card < _end_card; /* empty */) {
-        CardValue* dirty_l = find_first_dirty_card(cur_card);
-        CardValue* dirty_r = find_first_non_dirty_card(dirty_l);
+  //   template<typename Func>
+  //   void on_dirty_cards(Func&& f) {
+  //     for (CardValue* cur_card = _start_card; cur_card < _end_card; /* empty */) {
+  //       CardValue* dirty_l = find_first_dirty_card(cur_card);
+  //       CardValue* dirty_r = find_first_non_dirty_card(dirty_l);
 
-        assert(dirty_l <= dirty_r, "inv");
+  //       assert(dirty_l <= dirty_r, "inv");
 
-        if (dirty_l == dirty_r) {
-          assert(dirty_r == _end_card, "finished the entire chunk");
-          return;
-        }
+  //       if (dirty_l == dirty_r) {
+  //         assert(dirty_r == _end_card, "finished the entire chunk");
+  //         return;
+  //       }
 
-        f(dirty_l, dirty_r);
+  //       f(dirty_l, dirty_r);
 
-        cur_card = dirty_r + 1;
-      }
-    }
-  };
+  //       cur_card = dirty_r + 1;
+  //     }
+  //   }
+  // };
 
   void scan_heap_roots(HeapRegion* r) {
     uint const region_idx = r->hrm_index();
@@ -756,6 +864,32 @@ void G1RemSet::scan_heap_roots(G1ParScanThreadState* pss,
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.blocks_scanned(), G1GCPhaseTimes::ScanHRScannedBlocks);
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.chunks_claimed(), G1GCPhaseTimes::ScanHRClaimedChunks);
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.heap_roots_found(), G1GCPhaseTimes::ScanHRFoundRoots);
+}
+
+void G1RemSet::build_old_union(LinkedListQueue<uint>& r_to_visit, LinkedListSet<uint> & r_visited) {
+  ResourceMark rm;
+  auto &hrm = _g1h->_hrm;
+  auto ss = _scan_state;
+  while(!r_to_visit.empty()) {
+    uint const region_idx = r_to_visit.front();
+    HeapRegion* cur_region = hrm.at(region_idx);
+    r_to_visit.pop();
+
+    size_t const region_card_base_idx = ((size_t)region_idx << HeapRegion::LogCardsPerRegion);
+    CardValue* const start_card = _g1h->card_table()->byte_for_index(region_card_base_idx);
+    CardValue* const end_card = start_card + ss->scan_chunk_size_in_cards();
+
+    ChunkScanner chunk_scanner{start_card, end_card};
+    chunk_scanner.on_dirty_cards([&] (CardValue* dirty_l, CardValue* dirty_r) {
+      for (CardValue* i_card = dirty_l; i_card < dirty_r; ++i_card) {
+        auto r_idx = _ct->region_idx_for(i_card);
+        if (r_visited.find(r_idx) == nullptr) {
+          r_visited.insert(r_idx);
+          r_to_visit.push(r_idx);
+        }
+      }
+    });
+  }
 }
 
 // Heap region closure to be applied to all regions in the current collection set
@@ -1607,7 +1741,7 @@ ScanRegionRemsetClosure::ScanRegionRemsetClosure(G1CollectedHeap* g1h):_ls(LogTa
   _g1h = g1h;
   _num_regions = _g1h->num_regions();
   _incoming_regions = NEW_C_HEAP_ARRAY(bool, _num_regions, mtGC);
-  
+
   // for(uint i = 0; i < _num_regions; i++){
   //   _incoming_regions[i] = false;
   // }

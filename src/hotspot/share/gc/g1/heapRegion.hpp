@@ -223,6 +223,7 @@ private:
   HeapRegionConcMarkStats* _conc_mark_stats;
 
   // Cached index of this region in the heap region sequence.
+  // [yyz]: use _hrm_index to get old_region from hrm
   const uint _hrm_index;
 
   HeapRegionType _type;

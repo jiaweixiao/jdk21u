@@ -190,6 +190,8 @@ class G1CollectionSet {
   // regions we might be able to evacuate in this pause.
   void finalize_old_part(double time_remaining_ms);
 
+  void finalize_incr_old_part();
+
   // Iterate the part of the collection set given by the offset and length applying the given
   // HeapRegionClosure. The worker_id will determine where in the part to start the iteration
   // to allow for more efficient parallel iteration.

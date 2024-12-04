@@ -1265,10 +1265,10 @@ void G1Policy::decide_on_concurrent_start_pause() {
 
 void G1Policy::record_concurrent_mark_cleanup_end(bool has_rebuilt_remembered_sets) {
   bool mixed_gc_pending = false;
-  if (has_rebuilt_remembered_sets) {
+  // if (has_rebuilt_remembered_sets) {
     G1CollectionSetChooser::build(_g1h->workers(), _g1h->num_regions(), candidates());
     mixed_gc_pending = next_gc_should_be_mixed("request young-only gcs");
-  }
+  // }
 
   if (log_is_enabled(Trace, gc, liveness)) {
     G1PrintRegionLivenessInfoClosure cl("Post-Cleanup");
@@ -1292,11 +1292,9 @@ void G1Policy::record_concurrent_mark_cleanup_end(bool has_rebuilt_remembered_se
 void G1Policy::abandon_collection_set_candidates() {
   // Clear remembered sets of remaining candidate regions and the actual candidate
   // set.
-  for (HeapRegion* r : *candidates()) {
-    r->rem_set()->clear_locked(true /* only_cardset */);
-    log_info(gc)("clear remset (abandon candidates) of %u", r->hrm_index());
-
-  }
+  // for (HeapRegion* r : *candidates()) {
+  //   r->rem_set()->clear_locked(true /* only_cardset */);
+  // }
   _collection_set->abandon_all_candidates();
 }
 
@@ -1383,7 +1381,7 @@ bool G1Policy::next_gc_should_be_mixed(const char* no_candidates_str) const {
   if (G1DisableMixedGC){
     return false;
   }
-  
+
   if (!candidates()->has_more_marking_candidates()) {
     if (no_candidates_str != nullptr) {
       log_debug(gc, ergo)("%s (candidate old regions not available)", no_candidates_str);

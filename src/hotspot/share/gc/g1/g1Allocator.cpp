@@ -22,6 +22,7 @@
  *
  */
 
+#include "logging/log.hpp"
 #include "precompiled.hpp"
 #include "gc/g1/g1Allocator.inline.hpp"
 #include "gc/g1/g1AllocRegion.inline.hpp"
@@ -134,9 +135,11 @@ void G1Allocator::init_gc_alloc_regions(G1EvacInfo* evacuation_info) {
   }
 
   _old_gc_alloc_region.init();
+  // log_info(gc) ("_old_gc_alloc_region: %u", _old_gc_alloc_region._alloc_region->hrm_index());
   reuse_retained_old_region(evacuation_info,
                             &_old_gc_alloc_region,
                             &_retained_old_gc_alloc_region);
+  log_info(gc) ("_old_gc_alloc_region: %u", _old_gc_alloc_region._alloc_region->hrm_index());
 }
 
 void G1Allocator::release_gc_alloc_regions(G1EvacInfo* evacuation_info) {
