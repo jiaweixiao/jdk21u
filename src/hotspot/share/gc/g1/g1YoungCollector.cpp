@@ -1040,8 +1040,8 @@ void G1YoungCollector::collect() {
     // other trivial setup above).
     policy()->record_young_collection_start();
 
-    log_info(gc)("before pre evac");
-    _g1h->rem_set()->log_remset();
+    // log_info(gc)("before pre evac");
+    // _g1h->rem_set()->log_remset();
 
     pre_evacuate_collection_set(jtm.evacuation_info());
 
@@ -1052,18 +1052,18 @@ void G1YoungCollector::collect() {
 
     bool may_do_optional_evacuation = collection_set()->optional_region_length() != 0;
     // Actually do the work...
-    log_info(gc)("before initial evac");
-     _g1h->rem_set()->log_remset();
+    // log_info(gc)("before initial evac");
+    //  _g1h->rem_set()->log_remset();
     evacuate_initial_collection_set(&per_thread_states, may_do_optional_evacuation);
 
     if (may_do_optional_evacuation) {
-      log_info(gc)("before opt evac");
-     _g1h->rem_set()->log_remset();
+    //   log_info(gc)("before opt evac");
+    //  _g1h->rem_set()->log_remset();
       evacuate_optional_collection_set(&per_thread_states);
     }
 
-    log_info(gc)("before post evac");
-     _g1h->rem_set()->log_remset();
+    // log_info(gc)("before post evac");
+    //  _g1h->rem_set()->log_remset();
     post_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
 
     // Refine the type of a concurrent mark operation now that we did the
@@ -1075,8 +1075,8 @@ void G1YoungCollector::collect() {
     jtm.report_pause_type(collector_state()->young_gc_pause_type(_concurrent_operation_is_full_mark));
 
     policy()->record_young_collection_end(_concurrent_operation_is_full_mark, evacuation_failed());
-    log_info(gc)("before young gc end");
-    _g1h->rem_set()->log_remset();
+    // log_info(gc)("before young gc end");
+    // _g1h->rem_set()->log_remset();
   }
   TASKQUEUE_STATS_ONLY(_g1h->task_queues()->print_and_reset_taskqueue_stats("Oop Queue");)
 }

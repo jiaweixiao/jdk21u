@@ -107,7 +107,7 @@ void HeapRegion::handle_evacuation_failure() {
   move_to_old();
 
   _rem_set->clean_code_roots(this);
-  log_info(gc)("clear remset (evac failure) of %u", hrm_index());
+  // log_info(gc)("clear remset (evac failure) of %u", hrm_index());
 
   _rem_set->clear_locked(true /* only_cardset */);
 }

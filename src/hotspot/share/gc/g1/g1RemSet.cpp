@@ -1315,7 +1315,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
       // implicitly rebuild anything else during eager reclaim. Note that at the moment
       // (and probably never) we do not enter this path if there are other kind of
       // remembered sets for this region.
-      log_info(gc)("clear remset (merge heap roots) of %u", r->hrm_index());
+      // log_info(gc)("clear remset (merge heap roots) of %u", r->hrm_index());
       r->rem_set()->clear_locked(true /* only_cardset */);
       // Clear_locked() above sets the state to Empty. However we want to continue
       // collecting remembered set entries for humongous regions that were not
@@ -1417,7 +1417,9 @@ public:
   {
     if (initial_evacuation) {
       G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
+      log_info(gc)("cards before take all %lu", dcqs.num_cards());
       BufferNodeList buffers = dcqs.take_all_completed_buffers();
+      log_info(gc)("cards aftert take all %lu", dcqs.num_cards());
       if (buffers._entry_count != 0) {
         _dirty_card_buffers.prepend(*buffers._head, *buffers._tail);
       }
