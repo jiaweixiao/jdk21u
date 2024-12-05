@@ -67,7 +67,7 @@ public:
   void set_in_marking_set(bool in_marking_set){
     _in_marking_set = in_marking_set;
   }
-}
+};
 
 // A HeapRegion is the smallest piece of a G1CollectedHeap that
 // can be collected independently.
