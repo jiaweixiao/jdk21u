@@ -1147,6 +1147,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
     }
 
     void mark_card(G1CardTable::CardValue* value) {
+      assert(value != CardValue::g1_scanned_card_val(), "scanned value exists");
       if (_ct->mark_clean_as_dirty(value)) {
         _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(value));
       }
@@ -1484,6 +1485,317 @@ public:
   }
 };
 
+class G1MergeHeapRootsForMarkingTask : public WorkerTask {
+  G1ParScanThreadStateSet* _per_thread_states;
+
+  class G1MergeCardSetStats {
+    size_t _merged[G1GCPhaseTimes::MergeRSContainersSentinel];
+
+  public:
+    G1MergeCardSetStats() {
+      for (uint i = 0; i < ARRAY_SIZE(_merged); i++) {
+        _merged[i] = 0;
+      }
+    }
+
+    void inc_card_set_merged(uint tag) {
+      assert(tag < ARRAY_SIZE(_merged), "tag out of bounds %u", tag);
+      _merged[tag]++;
+    }
+
+    void inc_remset_cards(size_t increment = 1) {
+      _merged[G1GCPhaseTimes::MergeRSCards] += increment;
+    }
+
+    size_t merged(uint i) const { return _merged[i]; }
+  };
+
+  // Visitor for remembered sets. Several methods of it are called by a region's
+  // card set iterator to drop card set remembered set entries onto the card.
+  // table. This is in addition to being the HeapRegionClosure to iterate over
+  // all region's remembered sets.
+  //
+  // We add a small prefetching cache in front of the actual work as dropping
+  // onto the card table is basically random memory access. This improves
+  // performance of this operation significantly.
+  class G1MergeCardSetClosure : public HeapRegionClosure {
+    friend class G1MergeCardSetCache;
+
+    G1RemSetScanState* _scan_state;
+    G1CardTable* _ct;
+
+    G1MergeCardSetStats _stats;
+
+    // Cached card table index of the currently processed region to avoid constant
+    // recalculation as our remembered set containers are per region.
+    size_t _region_base_idx;
+
+    class G1MergeCardSetCache : public G1MergeHeapRootsPrefetchCache<G1CardTable::CardValue> {
+      G1MergeCardSetClosure* const _merge_card_cl;
+
+    public:
+      G1MergeCardSetCache(G1MergeCardSetClosure* const merge_card_cl) :
+        // Initially set dummy card value to Dirty to avoid any actual mark work if we
+        // try to process it.
+        G1MergeHeapRootsPrefetchCache<G1CardTable::CardValue>(G1CardTable::dirty_card_val()),
+        _merge_card_cl(merge_card_cl) { }
+
+      void flush() {
+        for (uint i = 0; i < CacheSize; i++) {
+          _merge_card_cl->mark_card(push(&_dummy_card));
+        }
+      }
+    } _merge_card_set_cache;
+
+    // Returns whether the region contains cards we need to scan. If so, remember that
+    // region in the current set of dirty regions.
+    bool remember_if_interesting(uint const region_idx) {
+      if (!_scan_state->contains_cards_to_process(region_idx)) {
+        return false;
+      }
+      _scan_state->add_dirty_region(region_idx);
+      return true;
+    }
+
+    void mark_card(G1CardTable::CardValue* value) {
+      assert(value != CardValue::g1_scanned_card_val(), "scanned value exists");
+      if (_ct->mark_clean_as_dirty(value)) {
+        _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(value));
+      }
+      _stats.inc_remset_cards();
+    }
+
+  public:
+
+    G1MergeCardSetClosure(G1RemSetScanState* scan_state) :
+      _scan_state(scan_state),
+      _ct(G1CollectedHeap::heap()->card_table()),
+      _stats(),
+      _region_base_idx(0),
+      _merge_card_set_cache(this) { }
+
+    void do_card(uint const card_idx) {
+      G1CardTable::CardValue* to_prefetch = _ct->byte_for_index(_region_base_idx + card_idx);
+      G1CardTable::CardValue* to_process = _merge_card_set_cache.push(to_prefetch);
+
+      mark_card(to_process);
+    }
+
+    // Returns whether the given region actually needs iteration.
+    bool start_iterate(uint const tag, uint const region_idx) {
+      // assert(tag < G1GCPhaseTimes::MergeRSCards, "invalid tag %u", tag);
+      // if (remember_if_interesting(region_idx)) {
+      _region_base_idx = (size_t)region_idx << HeapRegion::LogCardsPerRegion;
+      _stats.inc_card_set_merged(tag);
+      return true;
+      // }
+      // return false;
+    }
+
+    void do_card_range(uint const start_card_idx, uint const length) {
+      _ct->mark_range_dirty(_region_base_idx + start_card_idx, length);
+      _stats.inc_remset_cards(length);
+      _scan_state->set_chunk_range_dirty(_region_base_idx + start_card_idx, length);
+    }
+
+    // Helper to merge the cards in the card set for the given region onto the card
+    // table.
+    //
+    // Called directly for humongous starts regions because we should not add
+    // humongous eager reclaim candidates to the "all" list of regions to
+    // clear the card table by default as we do not know yet whether this region
+    // will be reclaimed (and reused).
+    // If the humongous region contains dirty cards, g1 will scan them
+    // because dumping the remembered set entries onto the card table will add
+    // the humongous region to the "dirty" region list to scan. Then scanning
+    // either clears the card during scan (if there is only an initial evacuation
+    // pass) or the "dirty" list will be merged with the "all" list later otherwise.
+    // (And there is no problem either way if the region does not contain dirty
+    // cards).
+    void merge_card_set_for_region(HeapRegion* r) {
+      assert(r->conc_mark_stats()->is_in_marking_set(), "must be");
+
+      HeapRegionRemSet* rem_set = r->rem_set();
+      if (!rem_set->is_empty()) {
+        rem_set->iterate_for_merge(*this);
+      }
+    }
+
+    virtual bool do_heap_region(HeapRegion* r) {
+      // assert(r->in_collection_set(), "must be");
+      if(!r->conc_mark_stats()->is_in_marking_set()){
+        return false;
+      }
+
+      _scan_state->add_all_dirty_region(r->hrm_index());
+      merge_card_set_for_region(r);
+
+      return false;
+    }
+
+    G1MergeCardSetStats stats() {
+      _merge_card_set_cache.flush();
+      return _stats;
+    }
+  };
+
+  // Visitor for the log buffer entries to merge them into the card table.
+  class G1MergeLogBufferCardsClosure : public G1CardTableEntryClosure {
+    G1ParScanThreadState* _pss;
+    G1RemSetScanState* _scan_state;
+    G1CardTable* _ct;
+
+    size_t _cards_dirty;
+    size_t _cards_skipped;
+
+    void process_card(CardValue* card_ptr) {
+      assert(*card_ptr != CardValue::g1_scanned_card_val(), "scanned value exists");
+      if (*card_ptr == G1CardTable::dirty_card_val()) {
+        uint const region_idx = _ct->region_idx_for(card_ptr);
+        // log_info(gc)("process dirty card in log entry of region %u", region_idx);
+        _scan_state->add_dirty_region(region_idx);
+        _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(card_ptr));
+        _cards_dirty++;
+      } else {
+        assert(false, "should be dirty");
+      }
+    }
+
+  public:
+    G1MergeLogBufferCardsClosure(G1CollectedHeap* g1h, G1ParScanThreadState* pss, G1RemSetScanState* scan_state) :
+      _pss(pss),
+      _scan_state(scan_state),
+      _ct(g1h->card_table()),
+      _cards_dirty(0),
+      _cards_skipped(0)
+    {}
+
+    void do_card_ptr(CardValue* card_ptr, uint worker_id) {
+      // The only time we care about recording cards that
+      // contain references that point into the collection set
+      // is during RSet updating within an evacuation pause.
+      // In this case worker_id should be the id of a GC worker thread.
+      assert(SafepointSynchronize::is_at_safepoint(), "not during an evacuation pause");
+
+      uint const region_idx = _ct->region_idx_for(card_ptr);
+
+      // The second clause must come after - the log buffers might contain cards to uncommitted
+      // regions.
+      // This code may count duplicate entries in the log buffers (even if rare) multiple
+      // times.
+      if (_scan_state->contains_cards_to_process(region_idx)) {
+        if(hr != nullptr){
+          //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
+          //them. However, we need to add the back to the dirty card queue.
+          //For cards in regions not for conc marking, we should scan them.
+          _pss->enqueue_card_val(card_ptr);
+          process_card(card_ptr);
+        }
+      } else {
+        // We may have had dirty cards in the (initial) collection set (or the
+        // young regions which are always in the initial collection set). We do
+        // not fix their cards here: we already added these regions to the set of
+        // regions to clear the card table at the end during the prepare() phase.
+        _cards_skipped++;
+      }
+    }
+
+    size_t cards_dirty() const { return _cards_dirty; }
+    size_t cards_skipped() const { return _cards_skipped; }
+  };
+
+  HeapRegionClaimer _hr_claimer;
+  G1RemSetScanState* _scan_state;
+  BufferNode::Stack _dirty_card_buffers;
+  bool _initial_evacuation;
+
+  volatile bool _fast_reclaim_handled;
+
+  void apply_closure_to_dirty_card_buffers(G1MergeLogBufferCardsClosure* cl, uint worker_id) {
+    G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
+    size_t buffer_size = dcqs.buffer_size();
+    while (BufferNode* node = _dirty_card_buffers.pop()) {
+      cl->apply_to_buffer(node, buffer_size, worker_id);
+      dcqs.deallocate_buffer(node);
+    }
+  }
+
+public:
+  G1MergeHeapRootsForMarkingTask(G1ParScanThreadStateSet* per_thread_states, G1RemSetScanState* scan_state, uint num_workers) :
+    WorkerTask("G1 Merge Heap Roots"),
+    _per_thread_states(per_thread_states),
+    _hr_claimer(num_workers),
+    _scan_state(scan_state),
+    _dirty_card_buffers(),
+    _fast_reclaim_handled(false)
+  {
+    G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
+    BufferNodeList buffers = dcqs.take_all_completed_buffers();
+    if (buffers._entry_count != 0) {
+      _dirty_card_buffers.prepend(*buffers._head, *buffers._tail);
+    }
+  }
+
+  virtual void work(uint worker_id) {
+    G1CollectedHeap* g1h = G1CollectedHeap::heap();
+    G1GCPhaseTimes* p = g1h->phase_times();
+    G1ParScanThreadState* pss = _per_thread_states->state_for_worker(worker_id);
+
+    // G1GCPhaseTimes::GCParPhases merge_remset_phase = _initial_evacuation ?
+    //                                                  G1GCPhaseTimes::MergeRS :
+    //                                                  G1GCPhaseTimes::OptMergeRS;
+
+    {
+      // Merge remset of ...
+      // G1GCParPhaseTimesTracker x(p, merge_remset_phase, worker_id, !_initial_evacuation /* allow_multiple_record */);
+
+      // {
+      //   // 1. eager-reclaim candidates
+      //   G1GCParPhaseTimesTracker subphase_x(p, G1GCPhaseTimes::MergeER, worker_id);
+
+      //   G1FlushHumongousCandidateRemSets cl(_scan_state);
+      //   g1h->heap_region_iterate(&cl);
+      //   G1MergeCardSetStats stats = cl.stats();
+
+      //   for (uint i = 0; i < G1GCPhaseTimes::MergeRSContainersSentinel; i++) {
+      //     p->record_or_add_thread_work_item(merge_remset_phase, worker_id, stats.merged(i), i);
+      //   }
+      // }
+
+      {
+        // 2. collection set
+        G1MergeCardSetClosure merge(_scan_state);
+        // G1ClearBitmapClosure clear(g1h);
+        // G1CombinedClosure combined(&merge, &clear);
+
+        // g1h->collection_set_iterate_increment_from(&combined, nullptr, worker_id);
+        g1h->heap_region_iterate(&merge);
+        G1MergeCardSetStats stats = merge.stats();
+
+        for (uint i = 0; i < G1GCPhaseTimes::MergeRSContainersSentinel; i++) {
+          p->record_or_add_thread_work_item(merge_remset_phase, worker_id, stats.merged(i), i);
+        }
+      }
+    }
+
+    {
+      // assert(merge_remset_phase == G1GCPhaseTimes::MergeRS, "Wrong merge phase");
+      // G1GCParPhaseTimesTracker x(p, G1GCPhaseTimes::MergeLB, worker_id);
+
+      G1MergeLogBufferCardsClosure cl(g1h, pss, _scan_state);
+      apply_closure_to_dirty_card_buffers(&cl, worker_id);
+
+      // p->record_thread_work_item(G1GCPhaseTimes::MergeLB, worker_id, cl.cards_dirty(), G1GCPhaseTimes::MergeLBDirtyCards);
+      // p->record_thread_work_item(G1GCPhaseTimes::MergeLB, worker_id, cl.cards_skipped(), G1GCPhaseTimes::MergeLBSkippedCards);
+    }
+
+    // Now apply the closure to all remaining log entries.
+    // if (_initial_evacuation) {
+      
+    // }
+  }
+};
+
 void G1RemSet::print_merge_heap_roots_stats() {
   LogTarget(Debug, gc, remset) lt;
   if (lt.is_enabled()) {
@@ -1536,6 +1848,18 @@ void G1RemSet::merge_heap_roots(bool initial_evacuation) {
   }
 
   print_merge_heap_roots_stats();
+}
+
+void G1RemSet::merge_heap_roots_for_marking(G1ParScanThreadStateSet* per_thread_states){
+  WorkerThreads* workers = g1h->workers();
+  size_t const increment_length = g1h->collection_set()->increment_length();
+
+  uint const num_workers = workers->active_workers();
+
+  {
+    G1MergeHeapRootsForMarkingTask cl(per_thread_states, _scan_state, num_workers);
+    workers->run_task(&cl, num_workers);
+  }
 }
 
 void G1RemSet::complete_evac_phase(bool has_more_than_one_evacuation_phase) {

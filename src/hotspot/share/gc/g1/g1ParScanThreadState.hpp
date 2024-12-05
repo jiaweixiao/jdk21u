@@ -145,6 +145,7 @@ public:
   // Assumes that a significant amount of pre-filtering (like done by
   // write_ref_field_post() above) has already been performed.
   template <class T> void enqueue_card_if_tracked(G1HeapRegionAttr region_attr, T* p, oop o);
+  void enqueue_card_val(CardValue* card);
 
   G1EvacuationRootClosures* closures() { return _closures; }
   uint worker_id() { return _worker_id; }
@@ -155,6 +156,7 @@ public:
   // Pass locally gathered statistics to global state. Returns the total number of
   // HeapWords copied.
   size_t flush_stats(size_t* surviving_young_words, uint num_workers);
+  void G1ParScanThreadState::flush_log_cards();
 
 private:
   void do_partial_array(PartialArrayScanTask task);
@@ -251,6 +253,7 @@ class G1ParScanThreadStateSet : public StackObj {
   PreservedMarksSet* preserved_marks_set() { return &_preserved_marks_set; }
 
   void flush_stats();
+  void flush_log_cards();
   void record_unused_optional_region(HeapRegion* hr);
 
   G1ParScanThreadState* state_for_worker(uint worker_id);

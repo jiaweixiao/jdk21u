@@ -62,6 +62,7 @@ inline void G1CardTable::mark_range_dirty(size_t start_card_index, size_t num_ca
       CardValue* cur = (CardValue*)cur_word;
       for (size_t i = 0; i < sizeof(size_t); i++) {
         CardValue value = *cur;
+        assert(value != CardValue::g1_scanned_card_val(), "scanned value exists");
         if (value == clean_card_val()) {
           *cur = dirty_card_val();
         }

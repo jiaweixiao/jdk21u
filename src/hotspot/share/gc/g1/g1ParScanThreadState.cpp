@@ -131,6 +131,10 @@ size_t G1ParScanThreadState::flush_stats(size_t* surviving_young_words, uint num
   return sum;
 }
 
+void G1ParScanThreadState::flush_log_cards(){
+  _rdc_local_qset.flush();
+}
+
 G1ParScanThreadState::~G1ParScanThreadState() {
   delete _plab_allocator;
   delete _closures;
@@ -604,6 +608,14 @@ void G1ParScanThreadStateSet::flush_stats() {
     _states[worker_id] = nullptr;
   }
   _flushed = true;
+}
+
+void G1ParScanThreadStateSet::flush_log_cards() {
+  for (uint worker_id = 0; worker_id < _num_workers; ++worker_id) {
+    G1ParScanThreadState* pss = _states[worker_id];
+    assert(pss != nullptr, "must be initialized");
+    pss->flush_log_cards();
+  }
 }
 
 void G1ParScanThreadStateSet::record_unused_optional_region(HeapRegion* hr) {

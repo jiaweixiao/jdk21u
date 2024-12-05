@@ -1044,27 +1044,41 @@ void G1YoungCollector::collect() {
     _g1h->rem_set()->log_remset();
 
     pre_evacuate_collection_set(jtm.evacuation_info());
+    {
+      G1ParScanThreadStateSet per_thread_states(_g1h,
+                                                workers()->active_workers(),
+                                                collection_set(),
+                                                &_evac_failure_regions);
 
-    G1ParScanThreadStateSet per_thread_states(_g1h,
-                                              workers()->active_workers(),
-                                              collection_set(),
-                                              &_evac_failure_regions);
+      bool may_do_optional_evacuation = collection_set()->optional_region_length() != 0;
+      // Actually do the work...
+      log_info(gc)("before initial evac");
+      _g1h->rem_set()->log_remset();
+      evacuate_initial_collection_set(&per_thread_states, may_do_optional_evacuation);
 
-    bool may_do_optional_evacuation = collection_set()->optional_region_length() != 0;
-    // Actually do the work...
-    log_info(gc)("before initial evac");
-     _g1h->rem_set()->log_remset();
-    evacuate_initial_collection_set(&per_thread_states, may_do_optional_evacuation);
+      if (may_do_optional_evacuation) {
+        log_info(gc)("before opt evac");
+      _g1h->rem_set()->log_remset();
+        evacuate_optional_collection_set(&per_thread_states);
+      }
 
-    if (may_do_optional_evacuation) {
-      log_info(gc)("before opt evac");
-     _g1h->rem_set()->log_remset();
-      evacuate_optional_collection_set(&per_thread_states);
+      log_info(gc)("before post evac");
+      _g1h->rem_set()->log_remset();
+      post_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
     }
 
-    log_info(gc)("before post evac");
-     _g1h->rem_set()->log_remset();
-    post_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
+    {
+      G1ParScanThreadStateSet per_thread_states(_g1h,
+                                                workers()->active_workers(),
+                                                collection_set(),
+                                                &_evac_failure_regions);
+      _g1h->rem_set()->merge_heap_roots_for_marking();
+
+      {
+        G1PostGroupMarkingPreparationTask cl(per_thread_states, &_evac_failure_regions);
+        _g1h->run_batch_task(&cl);
+      }
+    }
 
     // Refine the type of a concurrent mark operation now that we did the
     // evacuation, eventually aborting it.
