@@ -1031,6 +1031,11 @@ void G1RemSet::prepare_for_scan_heap_roots() {
   _scan_state->prepare();
 }
 
+//hua: function for cleanup to keep state consistent
+void G1RemSet::cleanup_scan_state() {
+  _scan_state->cleanup();
+}
+
 // Small ring buffer used for prefetching cards for write from the card
 // table during GC.
 template <class T>
@@ -1857,6 +1862,7 @@ void G1RemSet::merge_heap_roots_for_marking(G1ParScanThreadStateSet* per_thread_
   WorkerThreads* workers = _g1h->workers();
   size_t const increment_length = _g1h->collection_set()->increment_length();
 
+  _scan_state->prepare_for_merge_heap_roots();
   uint const num_workers = workers->active_workers();
 
   {

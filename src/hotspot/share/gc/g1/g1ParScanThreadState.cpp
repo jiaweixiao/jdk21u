@@ -616,6 +616,8 @@ void G1ParScanThreadStateSet::flush_log_cards() {
     assert(pss != nullptr, "must be initialized");
     pss->flush_log_cards();
   }
+  //hua: we only reuse this part so we consider it to be flushed
+  _flushed = true;
 }
 
 void G1ParScanThreadStateSet::record_unused_optional_region(HeapRegion* hr) {

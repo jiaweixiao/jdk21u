@@ -746,7 +746,7 @@ class G1PostGroupMarkingPreparationTask::MergePssLoggedCardsTask : public G1Abst
 
 public:
   MergePssLoggedCardsTask(G1ParScanThreadStateSet* per_thread_states) :
-    G1AbstractSubTask(G1GCPhaseTimes::MergePSS),
+    G1AbstractSubTask(G1GCPhaseTimes::MergePSSLoggedCards),
     _per_thread_states(per_thread_states) { }
 
   double worker_cost() const override { return 1.0; }
@@ -762,7 +762,7 @@ class G1PostGroupMarkingPreparationTask::RedirtyLoggedCardsTask : public G1Abstr
 
 public:
   RedirtyLoggedCardsTask(G1RedirtyCardsQueueSet* rdcqs, G1EvacFailureRegions* evac_failure_regions) :
-    G1AbstractSubTask(G1GCPhaseTimes::RedirtyCards),
+    G1AbstractSubTask(G1GCPhaseTimes::RedirtyLoggedCards),
     _rdcqs(rdcqs),
     _nodes(rdcqs->all_completed_buffers()),
     _evac_failure_regions(evac_failure_regions) { }
@@ -790,13 +790,13 @@ public:
         next = node->next();
       }
     }
-    record_work_item(worker_id, 0, cl.num_dirtied());
+    // record_work_item(worker_id, 0, cl.num_dirtied());
   }
 };
 
 
 G1PostGroupMarkingPreparationTask::G1PostGroupMarkingPreparationTask(G1ParScanThreadStateSet* per_thread_states, G1EvacFailureRegions* evac_failure_regions) :
-  G1BatchedTask("Post Evacuate Cleanup 1", G1CollectedHeap::heap()->phase_times())
+  G1BatchedTask("Group Marking Preparation", G1CollectedHeap::heap()->phase_times())
 {
   add_serial_task(new MergePssLoggedCardsTask(per_thread_states));
   add_parallel_task(new RedirtyLoggedCardsTask(per_thread_states->rdcqs(), evac_failure_regions));

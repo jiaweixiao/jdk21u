@@ -106,6 +106,7 @@ public:
   // Prepare for and cleanup after scanning the heap roots. Must be called
   // once before and after in sequential code.
   void prepare_for_scan_heap_roots();
+  void cleanup_scan_state();
 
   // Print coarsening stats.
   void print_coarsen_stats();

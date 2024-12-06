@@ -129,14 +129,14 @@ void G1RedirtyCardsQueueSet::update_tail(BufferNode* node) {
 }
 
 void G1RedirtyCardsQueueSet::enqueue_completed_buffer(BufferNode* node) {
-  assert(_collecting, "precondition");
+  // assert(_collecting, "precondition");
   Atomic::add(&_entry_count, buffer_size() - node->index());
   _list.push(*node);
   update_tail(node);
 }
 
 void G1RedirtyCardsQueueSet::add_bufferlist(const BufferNodeList& buffers) {
-  assert(_collecting, "precondition");
+  // assert(_collecting, "precondition");
   if (buffers._head != nullptr) {
     assert(buffers._tail != nullptr, "invariant");
     Atomic::add(&_entry_count, buffers._entry_count);

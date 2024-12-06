@@ -1072,12 +1072,23 @@ void G1YoungCollector::collect() {
                                                 workers()->active_workers(),
                                                 collection_set(),
                                                 &_evac_failure_regions);
+      _g1h->rem_set()->prepare_for_scan_heap_roots();
+      G1DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
+      log_info(gc)("cards before merging heap roots %lu", dcqs.num_cards());
       _g1h->rem_set()->merge_heap_roots_for_marking(&per_thread_states);
+      log_info(gc)("cards after merging heap roots %lu", dcqs.num_cards());
 
       {
         G1PostGroupMarkingPreparationTask cl(&per_thread_states, &_evac_failure_regions);
         _g1h->run_batch_task(&cl);
+        log_info(gc)("cards after marking preparation roots %lu", dcqs.num_cards());
       }
+
+      _g1h->rem_set()->complete_evac_phase(true);
+      _g1h->rem_set()->cleanup_scan_state();
+      log_info(gc)("cards after marking preparation roots cleanup %lu", dcqs.num_cards());
+
+
     }
 
     // Refine the type of a concurrent mark operation now that we did the
