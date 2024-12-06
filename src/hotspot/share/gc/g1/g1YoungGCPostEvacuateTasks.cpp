@@ -132,67 +132,6 @@ G1PostEvacuateCollectionSetCleanupTask1::G1PostEvacuateCollectionSetCleanupTask1
   }
 }
 
-class G1PostGroupMarkingPreparationTask::MergePssLoggedCardsTask : public G1AbstractSubTask {
-  G1ParScanThreadStateSet* _per_thread_states;
-
-public:
-  MergePssLoggedCardsTask(G1ParScanThreadStateSet* per_thread_states) :
-    G1AbstractSubTask(G1GCPhaseTimes::MergePSS),
-    _per_thread_states(per_thread_states) { }
-
-  double worker_cost() const override { return 1.0; }
-
-  void do_work(uint worker_id) override { _per_thread_states->flush_log_cards(); 
-  }
-};
-
-class G1PostGroupMarkingPreparationTask::RedirtyLoggedCardsTask : public G1AbstractSubTask {
-  G1RedirtyCardsQueueSet* _rdcqs;
-  BufferNode* volatile _nodes;
-  G1EvacFailureRegions* _evac_failure_regions;
-
-public:
-  RedirtyLoggedCardsTask(G1RedirtyCardsQueueSet* rdcqs, G1EvacFailureRegions* evac_failure_regions) :
-    G1AbstractSubTask(G1GCPhaseTimes::RedirtyCards),
-    _rdcqs(rdcqs),
-    _nodes(rdcqs->all_completed_buffers()),
-    _evac_failure_regions(evac_failure_regions) { }
-
-  virtual ~RedirtyLoggedCardsTask() {
-    G1DirtyCardQueueSet& dcq = G1BarrierSet::dirty_card_queue_set();
-    dcq.merge_bufferlists(_rdcqs);
-    _rdcqs->verify_empty();
-  }
-
-  double worker_cost() const override {
-    // Needs more investigation.
-    return G1CollectedHeap::heap()->workers()->active_workers();
-  }
-
-  void do_work(uint worker_id) override {
-    RedirtyLoggedCardTableEntryClosure cl(G1CollectedHeap::heap(), _evac_failure_regions);
-    const size_t buffer_size = _rdcqs->buffer_size();
-    BufferNode* next = Atomic::load(&_nodes);
-    while (next != nullptr) {
-      BufferNode* node = next;
-      next = Atomic::cmpxchg(&_nodes, node, node->next());
-      if (next == node) {
-        cl.apply_to_buffer(node, buffer_size, worker_id);
-        next = node->next();
-      }
-    }
-    record_work_item(worker_id, 0, cl.num_dirtied());
-  }
-};
-
-
-G1PostGroupMarkingPreparationTask::G1PostGroupMarkingPreparationTask(G1ParScanThreadStateSet* per_thread_states, G1EvacFailureRegions* evac_failure_regions) :
-  G1BatchedTask("Post Evacuate Cleanup 1", G1CollectedHeap::heap()->phase_times())
-{
-  add_serial_task(new MergePssLoggedCardsTask(per_thread_states));
-  add_parallel_task(new RedirtyLoggedCardsTask(per_thread_states->rdcqs(), evac_failure_regions));
-}
-
 class G1FreeHumongousRegionClosure : public HeapRegionIndexClosure {
   uint _humongous_objects_reclaimed;
   uint _humongous_regions_reclaimed;
@@ -799,4 +738,66 @@ G1PostEvacuateCollectionSetCleanupTask2::G1PostEvacuateCollectionSetCleanupTask2
   add_parallel_task(new FreeCollectionSetTask(evacuation_info,
                                               per_thread_states->surviving_young_words(),
                                               evac_failure_regions));
+}
+
+
+class G1PostGroupMarkingPreparationTask::MergePssLoggedCardsTask : public G1AbstractSubTask {
+  G1ParScanThreadStateSet* _per_thread_states;
+
+public:
+  MergePssLoggedCardsTask(G1ParScanThreadStateSet* per_thread_states) :
+    G1AbstractSubTask(G1GCPhaseTimes::MergePSS),
+    _per_thread_states(per_thread_states) { }
+
+  double worker_cost() const override { return 1.0; }
+
+  void do_work(uint worker_id) override { _per_thread_states->flush_log_cards(); 
+  }
+};
+
+class G1PostGroupMarkingPreparationTask::RedirtyLoggedCardsTask : public G1AbstractSubTask {
+  G1RedirtyCardsQueueSet* _rdcqs;
+  BufferNode* volatile _nodes;
+  G1EvacFailureRegions* _evac_failure_regions;
+
+public:
+  RedirtyLoggedCardsTask(G1RedirtyCardsQueueSet* rdcqs, G1EvacFailureRegions* evac_failure_regions) :
+    G1AbstractSubTask(G1GCPhaseTimes::RedirtyCards),
+    _rdcqs(rdcqs),
+    _nodes(rdcqs->all_completed_buffers()),
+    _evac_failure_regions(evac_failure_regions) { }
+
+  virtual ~RedirtyLoggedCardsTask() {
+    G1DirtyCardQueueSet& dcq = G1BarrierSet::dirty_card_queue_set();
+    dcq.merge_bufferlists(_rdcqs);
+    _rdcqs->verify_empty();
+  }
+
+  double worker_cost() const override {
+    // Needs more investigation.
+    return G1CollectedHeap::heap()->workers()->active_workers();
+  }
+
+  void do_work(uint worker_id) override {
+    RedirtyLoggedCardTableEntryClosure cl(G1CollectedHeap::heap(), _evac_failure_regions);
+    const size_t buffer_size = _rdcqs->buffer_size();
+    BufferNode* next = Atomic::load(&_nodes);
+    while (next != nullptr) {
+      BufferNode* node = next;
+      next = Atomic::cmpxchg(&_nodes, node, node->next());
+      if (next == node) {
+        cl.apply_to_buffer(node, buffer_size, worker_id);
+        next = node->next();
+      }
+    }
+    record_work_item(worker_id, 0, cl.num_dirtied());
+  }
+};
+
+
+G1PostGroupMarkingPreparationTask::G1PostGroupMarkingPreparationTask(G1ParScanThreadStateSet* per_thread_states, G1EvacFailureRegions* evac_failure_regions) :
+  G1BatchedTask("Post Evacuate Cleanup 1", G1CollectedHeap::heap()->phase_times())
+{
+  add_serial_task(new MergePssLoggedCardsTask(per_thread_states));
+  add_parallel_task(new RedirtyLoggedCardsTask(per_thread_states->rdcqs(), evac_failure_regions));
 }

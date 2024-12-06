@@ -57,6 +57,7 @@ class G1ParScanThreadState : public CHeapObj<mtGC> {
   G1RedirtyCardsLocalQueueSet _rdc_local_qset;
   G1CardTable* _ct;
   G1EvacuationRootClosures* _closures;
+  typedef uint8_t CardValue;
 
   G1PLABAllocator* _plab_allocator;
 
@@ -145,7 +146,9 @@ public:
   // Assumes that a significant amount of pre-filtering (like done by
   // write_ref_field_post() above) has already been performed.
   template <class T> void enqueue_card_if_tracked(G1HeapRegionAttr region_attr, T* p, oop o);
-  void enqueue_card_val(CardValue* card);
+  void enqueue_card_val(CardValue* card){
+    _rdc_local_qset.enqueue(card);
+  }
 
   G1EvacuationRootClosures* closures() { return _closures; }
   uint worker_id() { return _worker_id; }
@@ -156,7 +159,7 @@ public:
   // Pass locally gathered statistics to global state. Returns the total number of
   // HeapWords copied.
   size_t flush_stats(size_t* surviving_young_words, uint num_workers);
-  void G1ParScanThreadState::flush_log_cards();
+  void flush_log_cards();
 
 private:
   void do_partial_array(PartialArrayScanTask task);

@@ -1072,10 +1072,10 @@ void G1YoungCollector::collect() {
                                                 workers()->active_workers(),
                                                 collection_set(),
                                                 &_evac_failure_regions);
-      _g1h->rem_set()->merge_heap_roots_for_marking();
+      _g1h->rem_set()->merge_heap_roots_for_marking(&per_thread_states);
 
       {
-        G1PostGroupMarkingPreparationTask cl(per_thread_states, &_evac_failure_regions);
+        G1PostGroupMarkingPreparationTask cl(&per_thread_states, &_evac_failure_regions);
         _g1h->run_batch_task(&cl);
       }
     }

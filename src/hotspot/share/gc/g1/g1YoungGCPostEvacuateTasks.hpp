@@ -84,6 +84,6 @@ class G1PostGroupMarkingPreparationTask : public G1BatchedTask {
 
 public:
   G1PostGroupMarkingPreparationTask(G1ParScanThreadStateSet* per_thread_states, G1EvacFailureRegions* evac_failure_regions);
-}
+};
 
 #endif // SHARE_GC_G1_G1YOUNGGCPOSTEVACUATETASKS_HPP

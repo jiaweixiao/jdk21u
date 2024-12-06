@@ -145,8 +145,8 @@ template <class T> void G1ParScanThreadState::enqueue_card_if_tracked(G1HeapRegi
   }
 }
 
+// void G1ParScanThreadState::enqueue_card_val(CardValue* card){
+//   _rdc_local_qset.enqueue(card);
+// }
 
-void G1ParScanThreadState::enqueue_card_val(CardValue* card){
-  _rdc_local_qset.enqueue(card);
-}
 #endif // SHARE_GC_G1_G1PARSCANTHREADSTATE_INLINE_HPP

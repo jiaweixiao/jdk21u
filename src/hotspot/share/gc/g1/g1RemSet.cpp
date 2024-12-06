@@ -1147,7 +1147,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
     }
 
     void mark_card(G1CardTable::CardValue* value) {
-      assert(value != CardValue::g1_scanned_card_val(), "scanned value exists");
+      assert(*value != G1CardTable::g1_scanned_card_val(), "scanned value exists");
       if (_ct->mark_clean_as_dirty(value)) {
         _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(value));
       }
@@ -1560,7 +1560,7 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
     }
 
     void mark_card(G1CardTable::CardValue* value) {
-      assert(value != CardValue::g1_scanned_card_val(), "scanned value exists");
+      assert(*value != G1CardTable::g1_scanned_card_val(), "scanned value exists");
       if (_ct->mark_clean_as_dirty(value)) {
         _scan_state->set_chunk_dirty(_ct->index_for_cardvalue(value));
       }
@@ -1651,7 +1651,7 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
     size_t _cards_skipped;
 
     void process_card(CardValue* card_ptr) {
-      assert(*card_ptr != CardValue::g1_scanned_card_val(), "scanned value exists");
+      assert(*card_ptr != G1CardTable::g1_scanned_card_val(), "scanned value exists");
       if (*card_ptr == G1CardTable::dirty_card_val()) {
         uint const region_idx = _ct->region_idx_for(card_ptr);
         // log_info(gc)("process dirty card in log entry of region %u", region_idx);
@@ -1685,15 +1685,16 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
       // regions.
       // This code may count duplicate entries in the log buffers (even if rare) multiple
       // times.
-      if (_scan_state->contains_cards_to_process(region_idx)) {
-        if(hr != nullptr){
-          //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
-          //them. However, we need to add the back to the dirty card queue.
-          //For cards in regions not for conc marking, we should scan them.
-          _pss->enqueue_card_val(card_ptr);
-          process_card(card_ptr);
-        }
+      HeapRegion* hr = G1CollectedHeap::heap()->region_at_or_null(region_idx);
+
+      if(hr != nullptr){
+        //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
+        //them. However, we need to add the back to the dirty card queue.
+        //For cards in regions not for conc marking, we should scan them.
+        _pss->enqueue_card_val(card_ptr);
+        process_card(card_ptr);
       } else {
+        assert(false, "should not be null?");
         // We may have had dirty cards in the (initial) collection set (or the
         // young regions which are always in the initial collection set). We do
         // not fix their cards here: we already added these regions to the set of
@@ -1740,7 +1741,7 @@ public:
 
   virtual void work(uint worker_id) {
     G1CollectedHeap* g1h = G1CollectedHeap::heap();
-    G1GCPhaseTimes* p = g1h->phase_times();
+    // G1GCPhaseTimes* p = g1h->phase_times();
     G1ParScanThreadState* pss = _per_thread_states->state_for_worker(worker_id);
 
     // G1GCPhaseTimes::GCParPhases merge_remset_phase = _initial_evacuation ?
@@ -1774,9 +1775,9 @@ public:
         g1h->heap_region_iterate(&merge);
         G1MergeCardSetStats stats = merge.stats();
 
-        for (uint i = 0; i < G1GCPhaseTimes::MergeRSContainersSentinel; i++) {
-          p->record_or_add_thread_work_item(merge_remset_phase, worker_id, stats.merged(i), i);
-        }
+        // for (uint i = 0; i < G1GCPhaseTimes::MergeRSContainersSentinel; i++) {
+        //   p->record_or_add_thread_work_item(merge_remset_phase, worker_id, stats.merged(i), i);
+        // }
       }
     }
 
@@ -1853,8 +1854,8 @@ void G1RemSet::merge_heap_roots(bool initial_evacuation) {
 }
 
 void G1RemSet::merge_heap_roots_for_marking(G1ParScanThreadStateSet* per_thread_states){
-  WorkerThreads* workers = g1h->workers();
-  size_t const increment_length = g1h->collection_set()->increment_length();
+  WorkerThreads* workers = _g1h->workers();
+  size_t const increment_length = _g1h->collection_set()->increment_length();
 
   uint const num_workers = workers->active_workers();
 
