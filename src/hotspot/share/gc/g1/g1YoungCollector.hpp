@@ -134,6 +134,9 @@ class G1YoungCollector {
 
 public:
   G1YoungCollector(GCCause::Cause gc_cause);
+  void select_regions_for_group_marking();
+  void clear_regions_for_group_marking();
+
   void collect();
 
   bool concurrent_operation_is_full_mark() const { return _concurrent_operation_is_full_mark; }

@@ -1038,6 +1038,42 @@ G1YoungCollector::G1YoungCollector(GCCause::Cause gc_cause) :
 {
 }
 
+class ClearRegionForMarkingClosure : public HeapRegionClosure {
+  ClearRegionForMarkingClosure():HeapRegionClosure(){}
+  bool do_heap_region(HeapRegion* r){
+    r->conc_mark_stats()->set_in_marking_set(false);
+  }
+}
+
+class SelectRegionsForMarkingClosure : public HeapRegionClosure {
+public:
+  SelectRegionsForMarkingClosure():HeapRegionClosure(){}
+  bool do_heap_region(HeapRegion* r){
+    if(r->is_survivor()){
+      r->conc_mark_stats()->set_in_marking_set(true);
+    } else if (r->is_old()){
+      if(r->hrm_index() % 5 == 0){
+        r->conc_mark_stats()->set_in_marking_set(true);
+      }
+    } else if (r->is_starts_humongous()){
+      if(r->hrm_index() % 5 == 0){
+        r->conc_mark_stats()->set_in_marking_set(true);
+      }
+    } else if (r->is_continues_humongous()){
+      if(r->humongous_start_region()->hrm_index() % 5 == 0){
+        r->conc_mark_stats()->set_in_marking_set(true);
+      }
+    }
+    return false;
+  }
+}
+void G1YoungCollector::clear_regions_for_group_marking(){
+  _g1h->heap_region_iterate();
+}
+void G1YoungCollector::select_regions_for_group_marking(){
+  _g1h->heap_region_iterate();
+}
+
 void G1YoungCollector::collect() {
   // Do timing/tracing/statistics/pre- and post-logging/verification work not
   // directly related to the collection. They should not be accounted for in
@@ -1104,6 +1140,10 @@ void G1YoungCollector::collect() {
     }
 
     if (_g1h->collector_state()->in_concurrent_start_gc()){
+      clear_regions_for_group_marking();
+      select_regions_for_group_marking();
+
+
       G1ParScanThreadStateSet per_thread_states(_g1h,
                                                 workers()->active_workers(),
                                                 collection_set(),
