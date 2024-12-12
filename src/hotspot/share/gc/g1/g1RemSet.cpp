@@ -844,6 +844,140 @@ public:
   size_t heap_roots_found() const { return _heap_roots_found; }
 };
 
+
+// Scans a heap region for dirty cards.
+class G1ScanHRForMarkingClosure : public HeapRegionClosure {
+  using CardValue = CardTable::CardValue;
+
+  G1CollectedHeap* _g1h;
+  G1CardTable* _ct;
+
+  G1ParScanThreadState* _pss;
+
+  G1RemSetScanState* _scan_state;
+
+  G1GCPhaseTimes::GCParPhases _phase;
+
+  uint   _worker_id;
+
+  size_t _cards_scanned;
+  size_t _blocks_scanned;
+  size_t _chunks_claimed;
+  size_t _heap_roots_found;
+
+  Tickspan _rem_set_root_scan_time;
+  Tickspan _rem_set_trim_partially_time;
+
+  // The address to which this thread already scanned (walked the heap) up to during
+  // card scanning (exclusive).
+  HeapWord* _scanned_to;
+  CardValue _scanned_card_value;
+
+  HeapWord* scan_memregion(uint region_idx_for_card, MemRegion mr) {
+    HeapRegion* const card_region = _g1h->region_at(region_idx_for_card);
+    G1ScanCardForMarkingClosure card_cl(_g1h, _pss, _heap_roots_found);
+
+    HeapWord* const scanned_to = card_region->oops_on_memregion_seq_iterate_careful<true>(mr, &card_cl);
+    assert(scanned_to != nullptr, "Should be able to scan range");
+    assert(scanned_to >= mr.end(), "Scanned to " PTR_FORMAT " less than range " PTR_FORMAT, p2i(scanned_to), p2i(mr.end()));
+
+    // _pss->trim_queue_partially();
+    return scanned_to;
+  }
+
+  void do_claimed_block(uint const region_idx, CardValue* const dirty_l, CardValue* const dirty_r) {
+    _ct->change_dirty_cards_to(dirty_l, dirty_r, _scanned_card_value);
+    size_t num_cards = dirty_r - dirty_l;
+    _blocks_scanned++;
+
+    HeapWord* const card_start = _ct->addr_for(dirty_l);
+    HeapWord* const top = _scan_state->scan_top(region_idx);
+    if (card_start >= top) {
+      return;
+    }
+
+    HeapWord* scan_end = MIN2(card_start + (num_cards << BOTConstants::log_card_size_in_words()), top);
+    if (_scanned_to >= scan_end) {
+      return;
+    }
+    MemRegion mr(MAX2(card_start, _scanned_to), scan_end);
+    _scanned_to = scan_memregion(region_idx, mr);
+
+    _cards_scanned += num_cards;
+  }
+
+  void scan_heap_roots(HeapRegion* r) {
+    uint const region_idx = r->hrm_index();
+
+    ResourceMark rm;
+
+    G1CardTableChunkClaimer claim(_scan_state, region_idx);
+
+    // Set the current scan "finger" to null for every heap region to scan. Since
+    // the claim value is monotonically increasing, the check to not scan below this
+    // will filter out objects spanning chunks within the region too then, as opposed
+    // to resetting this value for every claim.
+    _scanned_to = nullptr;
+
+    while (claim.has_next()) {
+      _chunks_claimed++;
+
+      size_t const region_card_base_idx = ((size_t)region_idx << HeapRegion::LogCardsPerRegion) + claim.value();
+
+      CardValue* const start_card = _ct->byte_for_index(region_card_base_idx);
+      CardValue* const end_card = start_card + claim.size();
+
+      ChunkScanner chunk_scanner{start_card, end_card};
+      chunk_scanner.on_dirty_cards([&] (CardValue* dirty_l, CardValue* dirty_r) {
+                                     do_claimed_block(region_idx, dirty_l, dirty_r);
+                                   });
+    }
+  }
+
+public:
+  G1ScanHRForMarkingClosure(G1RemSetScanState* scan_state,
+                           G1ParScanThreadState* pss,
+                           uint worker_id,
+                           G1GCPhaseTimes::GCParPhases phase) :
+    _g1h(G1CollectedHeap::heap()),
+    _ct(_g1h->card_table()),
+    _pss(pss),
+    _scan_state(scan_state),
+    _phase(phase),
+    _worker_id(worker_id),
+    _cards_scanned(0),
+    _blocks_scanned(0),
+    _chunks_claimed(0),
+    _heap_roots_found(0),
+    _rem_set_root_scan_time(),
+    _rem_set_trim_partially_time(),
+    _scanned_to(nullptr),
+    _scanned_card_value(G1CardTable::clean_card_val()) {
+  }
+
+  bool do_heap_region(HeapRegion* r) {
+    // assert(!r->in_collection_set() && r->is_old_or_humongous(),
+    //        "Should only be called on old gen non-collection set regions but region %u is not.",
+    //        r->hrm_index());
+    uint const region_idx = r->hrm_index();
+
+    if (_scan_state->has_cards_to_scan(region_idx)) {
+      // G1EvacPhaseWithTrimTimeTracker timer(_pss, _rem_set_root_scan_time, _rem_set_trim_partially_time);
+      scan_heap_roots(r);
+    }
+    return false;
+  }
+
+  Tickspan rem_set_root_scan_time() const { return _rem_set_root_scan_time; }
+  Tickspan rem_set_trim_partially_time() const { return _rem_set_trim_partially_time; }
+
+  size_t cards_scanned() const { return _cards_scanned; }
+  size_t blocks_scanned() const { return _blocks_scanned; }
+  size_t chunks_claimed() const { return _chunks_claimed; }
+  size_t heap_roots_found() const { return _heap_roots_found; }
+};
+
+
 void G1RemSet::scan_heap_roots(G1ParScanThreadState* pss,
                                uint worker_id,
                                G1GCPhaseTimes::GCParPhases scan_phase,
@@ -864,6 +998,28 @@ void G1RemSet::scan_heap_roots(G1ParScanThreadState* pss,
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.blocks_scanned(), G1GCPhaseTimes::ScanHRScannedBlocks);
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.chunks_claimed(), G1GCPhaseTimes::ScanHRClaimedChunks);
   p->record_or_add_thread_work_item(scan_phase, worker_id, cl.heap_roots_found(), G1GCPhaseTimes::ScanHRFoundRoots);
+}
+
+void G1RemSet::scan_heap_roots_for_marking(G1ParScanThreadState* pss,
+                               uint worker_id,
+                               G1GCPhaseTimes::GCParPhases scan_phase,
+                               G1GCPhaseTimes::GCParPhases objcopy_phase,
+                               bool remember_already_scanned_cards) {
+  // EventGCPhaseParallel event;
+  G1ScanHRForMarkingClosure cl(_scan_state, pss, worker_id, scan_phase);
+  _scan_state->iterate_dirty_regions_from(&cl, worker_id);
+
+  // event.commit(GCId::current(), worker_id, G1GCPhaseTimes::phase_name(scan_phase));
+
+  // G1GCPhaseTimes* p = _g1p->phase_times();
+
+  // p->record_or_add_time_secs(objcopy_phase, worker_id, cl.rem_set_trim_partially_time().seconds());
+
+  // p->record_or_add_time_secs(scan_phase, worker_id, cl.rem_set_root_scan_time().seconds());
+  // p->record_or_add_thread_work_item(scan_phase, worker_id, cl.cards_scanned(), G1GCPhaseTimes::ScanHRScannedCards);
+  // p->record_or_add_thread_work_item(scan_phase, worker_id, cl.blocks_scanned(), G1GCPhaseTimes::ScanHRScannedBlocks);
+  // p->record_or_add_thread_work_item(scan_phase, worker_id, cl.chunks_claimed(), G1GCPhaseTimes::ScanHRClaimedChunks);
+  // p->record_or_add_thread_work_item(scan_phase, worker_id, cl.heap_roots_found(), G1GCPhaseTimes::ScanHRFoundRoots);
 }
 
 void G1RemSet::build_old_union(LinkedListQueue<uint>& r_to_visit, LinkedListSet<uint> & r_visited) {
@@ -976,6 +1132,90 @@ public:
   size_t opt_refs_scanned() const { return _opt_refs_scanned; }
   size_t opt_refs_memory_used() const { return _opt_refs_memory_used; }
 };
+
+class G1ScanGroupMarkingRegionClosure : public HeapRegionClosure {
+  G1ParScanThreadState* _pss;
+  G1RemSetScanState* _scan_state;
+
+  G1GCPhaseTimes::GCParPhases _scan_phase;
+  G1GCPhaseTimes::GCParPhases _code_roots_phase;
+
+  uint _worker_id;
+
+  size_t _opt_roots_scanned;
+  size_t _opt_refs_scanned;
+  size_t _opt_refs_memory_used;
+
+  Tickspan _code_root_scan_time;
+  Tickspan _code_trim_partially_time;
+
+  Tickspan _rem_set_opt_root_scan_time;
+  Tickspan _rem_set_opt_trim_partially_time;
+
+  void scan_opt_rem_set_roots(HeapRegion* r) {
+    G1OopStarChunkedList* opt_rem_set_list = _pss->oops_into_optional_region(r);
+
+    G1ScanCardClosure scan_cl(G1CollectedHeap::heap(), _pss, _opt_roots_scanned);
+    G1ScanRSForOptionalClosure cl(G1CollectedHeap::heap(), &scan_cl);
+    _opt_refs_scanned += opt_rem_set_list->oops_do(&cl, _pss->closures_for_group_marking()->strong_oops());
+    _opt_refs_memory_used += opt_rem_set_list->used_memory();
+  }
+
+public:
+  G1ScanGroupMarkingRegionClosure(G1RemSetScanState* scan_state,
+                                   G1ParScanThreadState* pss,
+                                   uint worker_id,
+                                   G1GCPhaseTimes::GCParPhases scan_phase,
+                                   G1GCPhaseTimes::GCParPhases code_roots_phase) :
+    _pss(pss),
+    _scan_state(scan_state),
+    _scan_phase(scan_phase),
+    _code_roots_phase(code_roots_phase),
+    _worker_id(worker_id),
+    _opt_roots_scanned(0),
+    _opt_refs_scanned(0),
+    _opt_refs_memory_used(0),
+    _code_root_scan_time(),
+    _code_trim_partially_time(),
+    _rem_set_opt_root_scan_time(),
+    _rem_set_opt_trim_partially_time() { }
+
+  bool do_heap_region(HeapRegion* r) {
+    uint const region_idx = r->hrm_index();
+
+    // The individual references for the optional remembered set are per-worker, so we
+    // always need to scan them.
+    // if (r->has_index_in_opt_cset()) {
+    //   EventGCPhaseParallel event;
+    //   G1EvacPhaseWithTrimTimeTracker timer(_pss, _rem_set_opt_root_scan_time, _rem_set_opt_trim_partially_time);
+    //   scan_opt_rem_set_roots(r);
+
+    //   event.commit(GCId::current(), _worker_id, G1GCPhaseTimes::phase_name(_scan_phase));
+    // }
+
+    if (_scan_state->claim_collection_set_region(region_idx)) {
+      EventGCPhaseParallel event;
+      G1EvacPhaseWithTrimTimeTracker timer(_pss, _code_root_scan_time, _code_trim_partially_time);
+      // Scan the code root list attached to the current region
+      r->code_roots_do(_pss->closures_for_group_marking()->weak_codeblobs());
+
+      event.commit(GCId::current(), _worker_id, G1GCPhaseTimes::phase_name(_code_roots_phase));
+    }
+
+    return false;
+  }
+
+  Tickspan code_root_scan_time() const { return _code_root_scan_time;  }
+  Tickspan code_root_trim_partially_time() const { return _code_trim_partially_time; }
+
+  Tickspan rem_set_opt_root_scan_time() const { return _rem_set_opt_root_scan_time; }
+  Tickspan rem_set_opt_trim_partially_time() const { return _rem_set_opt_trim_partially_time; }
+
+  size_t opt_roots_scanned() const { return _opt_roots_scanned; }
+  size_t opt_refs_scanned() const { return _opt_refs_scanned; }
+  size_t opt_refs_memory_used() const { return _opt_refs_memory_used; }
+};
+
 
 void G1RemSet::scan_collection_set_regions(G1ParScanThreadState* pss,
                                            uint worker_id,
@@ -1693,11 +1933,22 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
       HeapRegion* hr = G1CollectedHeap::heap()->region_at_or_null(region_idx);
 
       if(hr != nullptr){
-        //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
-        //them. However, we need to add the back to the dirty card queue.
-        //For cards in regions not for conc marking, we should scan them.
+        if(hr->conc_mark_stats()->is_in_marking_set()){
+          //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
+          //them. However, we need to add the back to the dirty card queue.
+          //For cards in regions not for conc marking, we should scan them.
+          if(*card_ptr == G1CardTable::dirty_card_val()){
+            // *card_ptr = G1CardTable::clean_card_val();
+          } else if(*card_ptr == G1CardTable::clean_card_val()){
+            // log_info(gc)("card value: %d", *card_ptr);
+            // ShouldNotReachHere();
+          } else {
+            log_info(gc)("card value: %d", *card_ptr);
+            ShouldNotReachHere();
+          }
+          process_card(card_ptr);
+        }
         _pss->enqueue_card_val(card_ptr);
-        process_card(card_ptr);
       } else {
         assert(false, "should not be null?");
         // We may have had dirty cards in the (initial) collection set (or the

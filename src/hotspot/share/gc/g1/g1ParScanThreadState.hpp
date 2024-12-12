@@ -57,6 +57,7 @@ class G1ParScanThreadState : public CHeapObj<mtGC> {
   G1RedirtyCardsLocalQueueSet _rdc_local_qset;
   G1CardTable* _ct;
   G1EvacuationRootClosures* _closures;
+  G1EvacuationRootClosures* _closures_for_group_marking;
   typedef uint8_t CardValue;
 
   G1PLABAllocator* _plab_allocator;
@@ -151,6 +152,8 @@ public:
   }
 
   G1EvacuationRootClosures* closures() { return _closures; }
+  G1EvacuationRootClosures* closures_for_group_marking() { return _closures_for_group_marking; }
+
   uint worker_id() { return _worker_id; }
 
   size_t lab_waste_words() const;

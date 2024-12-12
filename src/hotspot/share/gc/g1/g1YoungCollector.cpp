@@ -678,6 +678,42 @@ public:
   { }
 };
 
+class G1RootGroupMarkingTask : public G1EvacuateRegionsBaseTask {
+  G1RootProcessor* _root_processor;
+  bool _has_optional_evacuation_work;
+
+  void scan_roots(G1ParScanThreadState* pss, uint worker_id) {
+    // _root_processor->evacuate_roots_for_group_marking(pss, worker_id);//buggy
+    _g1h->rem_set()->scan_heap_roots_for_marking(pss, worker_id, G1GCPhaseTimes::ScanHR, G1GCPhaseTimes::ObjCopy, _has_optional_evacuation_work);
+    //hua: todo check if we realy don't need to do anything
+    // _g1h->rem_set()->scan_collection_set_regions(pss, worker_id, G1GCPhaseTimes::ScanHR, G1GCPhaseTimes::CodeRoots, G1GCPhaseTimes::ObjCopy);
+  }
+
+  void evacuate_live_objects(G1ParScanThreadState* pss, uint worker_id) {
+    // G1EvacuateRegionsBaseTask::evacuate_live_objects(pss, worker_id, G1GCPhaseTimes::ObjCopy, G1GCPhaseTimes::Termination);
+  }
+
+  void start_work(uint worker_id) {
+    // _g1h->phase_times()->record_time_secs(G1GCPhaseTimes::GCWorkerStart, worker_id, Ticks::now().seconds());
+  }
+
+  void end_work(uint worker_id) {
+    // _g1h->phase_times()->record_time_secs(G1GCPhaseTimes::GCWorkerEnd, worker_id, Ticks::now().seconds());
+  }
+
+public:
+  G1RootGroupMarkingTask(G1CollectedHeap* g1h,
+                        G1ParScanThreadStateSet* per_thread_states,
+                        G1ScannerTasksQueueSet* task_queues,
+                        G1RootProcessor* root_processor,
+                        uint num_workers,
+                        bool has_optional_evacuation_work) :
+    G1EvacuateRegionsBaseTask("G1 Evacuate Regions", per_thread_states, task_queues, num_workers),
+    _root_processor(root_processor),
+    _has_optional_evacuation_work(has_optional_evacuation_work)
+  { }
+};
+
 void G1YoungCollector::evacuate_initial_collection_set(G1ParScanThreadStateSet* per_thread_states,
                                                       bool has_optional_evacuation_work) {
   G1GCPhaseTimes* p = phase_times();
@@ -1067,7 +1103,7 @@ void G1YoungCollector::collect() {
       post_evacuate_collection_set(jtm.evacuation_info(), &per_thread_states);
     }
 
-    {
+    if (_g1h->collector_state()->in_concurrent_start_gc()){
       G1ParScanThreadStateSet per_thread_states(_g1h,
                                                 workers()->active_workers(),
                                                 collection_set(),
@@ -1079,12 +1115,36 @@ void G1YoungCollector::collect() {
       log_info(gc)("cards after merging heap roots %lu", dcqs.num_cards());
 
       {
+        const uint num_workers = workers()->active_workers();
+        G1RootProcessor root_processor(_g1h, num_workers);
+        G1RootGroupMarkingTask g1_par_task(_g1h,
+                                          &per_thread_states,
+                                          task_queues(),
+                                          &root_processor,
+                                          num_workers,
+                                          false);
+        Tickspan task_time = run_task_timed(&g1_par_task);
+        // Closing the inner scope will execute the destructor for the
+        // G1RootProcessor object. By subtracting the WorkerThreads task from the total
+        // time of this scope, we get the "NMethod List Cleanup" time. This list is
+        // constructed during "STW two-phase nmethod root processing", see more in
+        // nmethod.hpp
+      }
+
+      _g1h->rem_set()->complete_evac_phase(true);
+
+      {
         G1PostGroupMarkingPreparationTask cl(&per_thread_states, &_evac_failure_regions);
         _g1h->run_batch_task(&cl);
         log_info(gc)("cards after marking preparation roots %lu", dcqs.num_cards());
       }
 
-      _g1h->rem_set()->complete_evac_phase(true);
+      {
+        G1PostGroupMarkingPreparationTask2 cl(&per_thread_states, &_evac_failure_regions);
+        _g1h->run_batch_task(&cl);
+        log_info(gc)("cards after marking preparation roots %lu", dcqs.num_cards());
+      }
+
       _g1h->rem_set()->cleanup_scan_state();
       log_info(gc)("cards after marking preparation roots cleanup %lu", dcqs.num_cards());
 

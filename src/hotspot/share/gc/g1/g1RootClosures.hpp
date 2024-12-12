@@ -52,6 +52,11 @@ public:
   static G1EvacuationRootClosures* create_root_closures(G1CollectedHeap* g1h,
                                                         G1ParScanThreadState* pss,
                                                         bool process_only_dirty_klasses);
+  static G1EvacuationRootClosures* create_root_closures_for_group_marking(G1CollectedHeap* g1h,
+                                                        G1ParScanThreadState* pss,
+                                                        bool process_only_dirty_klasses);
+
+
 };
 
 #endif // SHARE_GC_G1_G1ROOTCLOSURES_HPP

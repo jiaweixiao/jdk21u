@@ -69,6 +69,26 @@ public:
   CodeBlobClosure* weak_codeblobs()        { return &_weak._codeblobs; }
 };
 
+template <bool should_mark_weak>
+class G1ConcurrentStartGroupMarkClosures : public G1EvacuationRootClosures {
+  G1SharedGroupMarkingClosures<true>             _strong;
+  G1SharedGroupMarkingClosures<should_mark_weak> _weak;
+
+public:
+  G1ConcurrentStartGroupMarkClosures(G1CollectedHeap* g1h,
+                                G1ParScanThreadState* pss) :
+      _strong(g1h, pss, /* process_only_dirty_klasses */ false),
+      _weak(g1h, pss,   /* process_only_dirty_klasses */ false) {}
+
+  OopClosure* strong_oops() { return &_strong._oops; }
+
+  CLDClosure* weak_clds()             { return &_weak._clds; }
+  CLDClosure* strong_clds()           { return &_strong._clds; }
+
+  CodeBlobClosure* strong_codeblobs()      { return &_strong._codeblobs; }
+  CodeBlobClosure* weak_codeblobs()        { return &_weak._codeblobs; }
+};
+
 G1EvacuationRootClosures* G1EvacuationRootClosures::create_root_closures(G1CollectedHeap* g1h,
                                                                          G1ParScanThreadState* pss,
                                                                          bool process_only_dirty_klasses) {
@@ -81,6 +101,18 @@ G1EvacuationRootClosures* G1EvacuationRootClosures::create_root_closures(G1Colle
     }
   } else {
     res = new G1EvacuationClosures(g1h, pss, process_only_dirty_klasses);
+  }
+  return res;
+}
+
+G1EvacuationRootClosures* G1EvacuationRootClosures::create_root_closures_for_group_marking(G1CollectedHeap* g1h,
+                                                                         G1ParScanThreadState* pss,
+                                                                         bool process_only_dirty_klasses) {
+  G1EvacuationRootClosures* res = nullptr;
+  if (ClassUnloadingWithConcurrentMark) {
+    res = new G1ConcurrentStartGroupMarkClosures<false>(g1h, pss);
+  } else {
+    res = new G1ConcurrentStartGroupMarkClosures<true>(g1h, pss);
   }
   return res;
 }

@@ -56,11 +56,15 @@ G1GCPhaseTimes::G1GCPhaseTimes(STWGCTimer* gc_timer, uint max_gc_threads) :
 
   _gc_par_phases[GCWorkerStart] = new WorkerDataArray<double>("GCWorkerStart", "GC Worker Start (ms):", max_gc_threads);
   _gc_par_phases[ExtRootScan] = new WorkerDataArray<double>("ExtRootScan", "Ext Root Scanning (ms):", max_gc_threads);
+  _gc_par_phases[GCM_ExtRootScan] = new WorkerDataArray<double>("GCMExtRootScan", "Ext Root Scanning (ms):", max_gc_threads);
+
 
   // Root scanning phases
   _gc_par_phases[ThreadRoots] = new WorkerDataArray<double>("ThreadRoots", "Thread Roots (ms):", max_gc_threads);
   _gc_par_phases[CLDGRoots] = new WorkerDataArray<double>("CLDGRoots", "CLDG Roots (ms):", max_gc_threads);
   _gc_par_phases[CMRefRoots] = new WorkerDataArray<double>("CMRefRoots", "CM RefProcessor Roots (ms):", max_gc_threads);
+  _gc_par_phases[GCM_CMRefRoots] = new WorkerDataArray<double>("GCM_CMRefRoots", "CM RefProcessor Roots (ms):", max_gc_threads);
+
 
   for (auto id : EnumRange<OopStorageSet::StrongId>()) {
     GCParPhases phase = strong_oopstorage_phase(id);

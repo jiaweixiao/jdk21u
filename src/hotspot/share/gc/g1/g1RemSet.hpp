@@ -94,6 +94,12 @@ public:
                        G1GCPhaseTimes::GCParPhases objcopy_phase,
                        bool remember_already_scanned_cards);
 
+  void scan_heap_roots_for_marking(G1ParScanThreadState* pss,
+                       uint worker_id,
+                       G1GCPhaseTimes::GCParPhases scan_phase,
+                       G1GCPhaseTimes::GCParPhases objcopy_phase,
+                       bool remember_already_scanned_cards);
+
   void build_old_union(LinkedListQueue<uint>& r_q, LinkedListSet<uint> & r_set);
 
   // Merge cards from various sources (remembered sets, log buffers)

@@ -186,6 +186,32 @@ inline void G1ScanCardClosure::do_oop_work(T* p) {
 }
 
 template <class T>
+inline void G1ScanCardForMarkingClosure::do_oop_work(T* p) {
+  T o = RawAccess<>::oop_load(p);
+  if (CompressedOops::is_null(o)) {
+    return;
+  }
+  oop obj = CompressedOops::decode_not_null(o);
+
+  // check_obj_during_refinement(p, obj);
+
+  // assert(!_g1h->is_in_cset((HeapWord*)p),
+  //        "Oop originates from " PTR_FORMAT " (region: %u) which is in the collection set.",
+  //        p2i(p), _g1h->addr_to_region(p));
+
+  // const G1HeapRegionAttr region_attr = _g1h->region_attr(obj);
+  HeapRegion* r = _g1h->heap_region_containing_or_null(obj);
+  HeapRegion* r1 = _g1h->heap_region_containing_or_null(p);
+
+  assert(r != nullptr, "should not be null?");
+  assert(!r1->conc_mark_stats()->is_in_marking_set(), "should not be in marking set");
+  if (r->conc_mark_stats()->is_in_marking_set()){
+    //hua: todo mark in bitmap
+    _g1h->concurrent_mark()->mark_in_bitmap(_par_scan_state->worker_id(), obj);
+  }
+}
+
+template <class T>
 inline void G1ScanRSForOptionalClosure::do_oop_work(T* p) {
   const G1HeapRegionAttr region_attr = _g1h->region_attr(p);
   // Entries in the optional collection set may start to originate from the collection
@@ -258,6 +284,27 @@ void G1ParCopyClosure<barrier, should_mark>::do_oop_work(T* p) {
     }
   }
   trim_queue_partially();
+}
+
+template <G1Barrier barrier, bool should_mark>
+template <class T>
+void G1GroupHeapRootMarkingClosure<barrier, should_mark>::do_oop_work(T* p) {
+  T heap_oop = RawAccess<>::oop_load(p);
+
+  if (CompressedOops::is_null(heap_oop)) {
+    return;
+  }
+
+  oop obj = CompressedOops::decode_not_null(heap_oop);
+
+  assert(_worker_id == _par_scan_state->worker_id(), "sanity");
+
+  const G1HeapRegionAttr state = _g1h->region_attr(obj);
+  HeapRegion* r = _g1h->heap_region_containing_or_null(obj);
+  assert(r!=nullptr, "should be?");
+  if(r->conc_mark_stats()->is_in_marking_set()){
+    mark_object(obj);
+  }
 }
 
 template <class T> void G1RebuildRemSetClosure::do_oop_work(T* p) {

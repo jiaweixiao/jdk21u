@@ -50,9 +50,11 @@ class G1GCPhaseTimes : public CHeapObj<mtGC> {
     NonJavaThreadFlushLogs,
     GCWorkerStart,
     ExtRootScan,
+    GCM_ExtRootScan,
     ThreadRoots,
     CLDGRoots,
     CMRefRoots,
+    GCM_CMRefRoots,
     // For every strong OopStorage there will be one element in this enum,
     // starting with StrongOopStorageSetRoots.
     StrongOopStorageSetRoots,

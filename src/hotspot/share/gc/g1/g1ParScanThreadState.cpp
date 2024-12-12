@@ -66,6 +66,7 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h,
     _rdc_local_qset(rdcqs),
     _ct(g1h->card_table()),
     _closures(nullptr),
+    _closures_for_group_marking(nullptr),
     _plab_allocator(nullptr),
     _age_table(false),
     _tenuring_threshold(g1h->policy()->tenuring_threshold()),
@@ -106,6 +107,9 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h,
   _closures = G1EvacuationRootClosures::create_root_closures(_g1h,
                                                              this,
                                                              collection_set->only_contains_young_regions());
+  _closures_for_group_marking = G1EvacuationRootClosures::create_root_closures_for_group_marking(_g1h,
+                                                             this,
+                                                             collection_set->only_contains_young_regions());
 
   _oops_into_optional_regions = new G1OopStarChunkedList[_max_num_optional_regions];
 
@@ -138,6 +142,10 @@ void G1ParScanThreadState::flush_log_cards(){
 G1ParScanThreadState::~G1ParScanThreadState() {
   delete _plab_allocator;
   delete _closures;
+  if(_closures_for_group_marking != nullptr){
+    delete _closures_for_group_marking;
+    _closures_for_group_marking = nullptr;
+  }
   FREE_C_HEAP_ARRAY(size_t, _surviving_young_words_base);
   delete[] _oops_into_optional_regions;
   FREE_C_HEAP_ARRAY(size_t, _obj_alloc_stat);

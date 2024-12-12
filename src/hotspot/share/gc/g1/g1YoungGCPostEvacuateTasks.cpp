@@ -298,10 +298,11 @@ public:
 };
 
 class RedirtyLoggedCardTableEntryClosure : public G1CardTableEntryClosure {
-  size_t _num_dirtied;
+  size_t _num_dirtied, _num_skipped;
   G1CollectedHeap* _g1h;
   G1CardTable* _g1_ct;
   G1EvacFailureRegions* _evac_failure_regions;
+  bool _should_have_free;
 
   HeapRegion* region_for_card(CardValue* card_ptr) const {
     return _g1h->heap_region_containing(_g1_ct->addr_for(card_ptr));
@@ -317,6 +318,7 @@ public:
   RedirtyLoggedCardTableEntryClosure(G1CollectedHeap* g1h, G1EvacFailureRegions* evac_failure_regions) :
     G1CardTableEntryClosure(),
     _num_dirtied(0),
+    _num_skipped(0),
     _g1h(g1h),
     _g1_ct(g1h->card_table()),
     _evac_failure_regions(evac_failure_regions) { }
@@ -328,10 +330,14 @@ public:
     if (!will_become_free(hr)) {
       *card_ptr = G1CardTable::dirty_card_val();
       _num_dirtied++;
+    } else {
+      _num_skipped++;
     }
   }
 
   size_t num_dirtied()   const { return _num_dirtied; }
+  size_t num_skipped()   const { return _num_skipped; }
+
 };
 
 class G1PostEvacuateCollectionSetCleanupTask2::ClearRetainedRegionBitmaps : public G1AbstractSubTask {
@@ -755,7 +761,7 @@ public:
   }
 };
 
-class G1PostGroupMarkingPreparationTask::RedirtyLoggedCardsTask : public G1AbstractSubTask {
+class G1PostGroupMarkingPreparationTask2::RedirtyLoggedCardsTask : public G1AbstractSubTask {
   G1RedirtyCardsQueueSet* _rdcqs;
   BufferNode* volatile _nodes;
   G1EvacFailureRegions* _evac_failure_regions;
@@ -769,6 +775,7 @@ public:
 
   virtual ~RedirtyLoggedCardsTask() {
     G1DirtyCardQueueSet& dcq = G1BarrierSet::dirty_card_queue_set();
+    log_info(gc)("cards before merging %lu", dcq.num_cards());
     dcq.merge_bufferlists(_rdcqs);
     _rdcqs->verify_empty();
   }
@@ -781,6 +788,8 @@ public:
   void do_work(uint worker_id) override {
     RedirtyLoggedCardTableEntryClosure cl(G1CollectedHeap::heap(), _evac_failure_regions);
     const size_t buffer_size = _rdcqs->buffer_size();
+    log_info(gc)("buffer size %lu", buffer_size);
+    size_t num_handled = 0;
     BufferNode* next = Atomic::load(&_nodes);
     while (next != nullptr) {
       BufferNode* node = next;
@@ -788,8 +797,14 @@ public:
       if (next == node) {
         cl.apply_to_buffer(node, buffer_size, worker_id);
         next = node->next();
+        num_handled += buffer_size;
       }
     }
+    log_info(gc)("num dirtied %lu", cl.num_dirtied());
+    log_info(gc)("num skipped %lu", cl.num_skipped());
+    log_info(gc)("num handled %lu", num_handled);
+
+
     // record_work_item(worker_id, 0, cl.num_dirtied());
   }
 };
@@ -799,5 +814,12 @@ G1PostGroupMarkingPreparationTask::G1PostGroupMarkingPreparationTask(G1ParScanTh
   G1BatchedTask("Group Marking Preparation", G1CollectedHeap::heap()->phase_times())
 {
   add_serial_task(new MergePssLoggedCardsTask(per_thread_states));
+  // add_parallel_task(new RedirtyLoggedCardsTask(per_thread_states->rdcqs(), evac_failure_regions));
+}
+
+G1PostGroupMarkingPreparationTask2::G1PostGroupMarkingPreparationTask2(G1ParScanThreadStateSet* per_thread_states, G1EvacFailureRegions* evac_failure_regions) :
+  G1BatchedTask("Group Marking Preparation2", G1CollectedHeap::heap()->phase_times())
+{
+  // add_serial_task(new MergePssLoggedCardsTask(per_thread_states));
   add_parallel_task(new RedirtyLoggedCardsTask(per_thread_states->rdcqs(), evac_failure_regions));
 }

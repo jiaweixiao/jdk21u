@@ -76,6 +76,29 @@ void G1RootProcessor::evacuate_roots(G1ParScanThreadState* pss, uint worker_id) 
   _process_strong_tasks.all_tasks_claimed(G1RP_PS_CodeCache_oops_do);
 }
 
+void G1RootProcessor::evacuate_roots_for_group_marking(G1ParScanThreadState* pss, uint worker_id) {
+  G1GCPhaseTimes* phase_times = _g1h->phase_times();
+
+  // G1EvacPhaseTimesTracker timer(phase_times, pss, G1GCPhaseTimes::GCM_ExtRootScan, worker_id);
+
+  G1EvacuationRootClosures* closures = pss->closures_for_group_marking();
+  process_java_roots(closures, phase_times, worker_id, true);
+
+  process_vm_roots(closures, phase_times, worker_id, true);
+
+  // Now the CM ref_processor roots.
+  if (_process_strong_tasks.try_claim_task(G1RP_PS_refProcessor_oops_do)) {
+    // G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::GCM_CMRefRoots, worker_id);
+    // We need to treat the discovered reference lists of the
+    // concurrent mark ref processor as roots and keep entries
+    // (which are added by the marking threads) on them live
+    // until they can be processed at the end of marking.
+    _g1h->ref_processor_cm()->weak_oops_do(closures->strong_oops());
+  }
+
+  // CodeCache is already processed in java roots
+  _process_strong_tasks.all_tasks_claimed(G1RP_PS_CodeCache_oops_do);
+}
 // Adaptor to pass the closures to the strong roots in the VM.
 class StrongRootsClosures : public G1RootClosures {
   OopClosure* _roots;
@@ -144,7 +167,7 @@ void G1RootProcessor::process_all_roots(OopClosure* oops,
 
 void G1RootProcessor::process_java_roots(G1RootClosures* closures,
                                          G1GCPhaseTimes* phase_times,
-                                         uint worker_id) {
+                                         uint worker_id, bool is_GCM) {
   // In the concurrent start pause, when class unloading is enabled, G1
   // processes nmethods in two ways, as "strong" and "weak" nmethods.
   //
@@ -174,30 +197,55 @@ void G1RootProcessor::process_java_roots(G1RootClosures* closures,
   // claimed before processing. A weakly claimed nmethod could be strongly
   // claimed again for performing marking (the c) operation above); see
   // oops_do_process_weak and oops_do_process_strong in nmethod.hpp
-  {
-    G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::ThreadRoots, worker_id);
-    bool is_par = n_workers() > 1;
-    Threads::possibly_parallel_oops_do(is_par,
-                                       closures->strong_oops(),
-                                       closures->strong_codeblobs());
+  if(!is_GCM){
+    {
+      G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::ThreadRoots, worker_id);
+      bool is_par = n_workers() > 1;
+      Threads::possibly_parallel_oops_do(is_par,
+                                        closures->strong_oops(),
+                                        closures->strong_codeblobs());
+    }
+
+    if (_process_strong_tasks.try_claim_task(G1RP_PS_ClassLoaderDataGraph_oops_do)) {
+      G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::CLDGRoots, worker_id);
+      ClassLoaderDataGraph::roots_cld_do(closures->strong_clds(), closures->weak_clds());
+    }
+  } else {
+    {
+      // G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::ThreadRoots, worker_id);
+      bool is_par = n_workers() > 1;
+      Threads::possibly_parallel_oops_do(is_par,
+                                        closures->strong_oops(),
+                                        closures->strong_codeblobs());
+    }
+
+    if (_process_strong_tasks.try_claim_task(G1RP_PS_ClassLoaderDataGraph_oops_do)) {
+      // G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::CLDGRoots, worker_id);
+      ClassLoaderDataGraph::roots_cld_do(closures->strong_clds(), closures->weak_clds());
+    }
   }
 
-  if (_process_strong_tasks.try_claim_task(G1RP_PS_ClassLoaderDataGraph_oops_do)) {
-    G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::CLDGRoots, worker_id);
-    ClassLoaderDataGraph::roots_cld_do(closures->strong_clds(), closures->weak_clds());
-  }
 }
 
 void G1RootProcessor::process_vm_roots(G1RootClosures* closures,
                                        G1GCPhaseTimes* phase_times,
-                                       uint worker_id) {
+                                       uint worker_id, bool is_GCM) {
   OopClosure* strong_roots = closures->strong_oops();
 
-  for (auto id : EnumRange<OopStorageSet::StrongId>()) {
-    G1GCPhaseTimes::GCParPhases phase = G1GCPhaseTimes::strong_oopstorage_phase(id);
-    G1GCParPhaseTimesTracker x(phase_times, phase, worker_id);
-    _oop_storage_set_strong_par_state.par_state(id)->oops_do(closures->strong_oops());
+  if(!is_GCM){
+    for (auto id : EnumRange<OopStorageSet::StrongId>()) {
+      G1GCPhaseTimes::GCParPhases phase = G1GCPhaseTimes::strong_oopstorage_phase(id);
+      G1GCParPhaseTimesTracker x(phase_times, phase, worker_id);
+      _oop_storage_set_strong_par_state.par_state(id)->oops_do(closures->strong_oops());
+    }
+  } else {
+    for (auto id : EnumRange<OopStorageSet::StrongId>()) {
+      // G1GCPhaseTimes::GCParPhases phase = G1GCPhaseTimes::strong_oopstorage_phase(id);
+      // G1GCParPhaseTimesTracker x(phase_times, phase, worker_id);
+      _oop_storage_set_strong_par_state.par_state(id)->oops_do(closures->strong_oops());
+    }
   }
+
 }
 
 void G1RootProcessor::process_code_cache_roots(CodeBlobClosure* code_closure,

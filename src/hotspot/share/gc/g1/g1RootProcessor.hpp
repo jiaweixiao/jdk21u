@@ -62,11 +62,11 @@ class G1RootProcessor : public StackObj {
 
   void process_java_roots(G1RootClosures* closures,
                           G1GCPhaseTimes* phase_times,
-                          uint worker_id);
+                          uint worker_id, bool is_GCM=false);
 
   void process_vm_roots(G1RootClosures* closures,
                         G1GCPhaseTimes* phase_times,
-                        uint worker_id);
+                        uint worker_id, bool is_GCM=false);
 
   void process_code_cache_roots(CodeBlobClosure* code_closure,
                                 G1GCPhaseTimes* phase_times,
@@ -79,6 +79,8 @@ public:
   // in a single pass.
   // Record and report timing measurements for sub phases using worker_id.
   void evacuate_roots(G1ParScanThreadState* pss, uint worker_id);
+
+  void evacuate_roots_for_group_marking(G1ParScanThreadState* pss, uint worker_id);
 
   // Apply oops, clds and blobs to all strongly reachable roots in the system
   void process_strong_roots(OopClosure* oops,

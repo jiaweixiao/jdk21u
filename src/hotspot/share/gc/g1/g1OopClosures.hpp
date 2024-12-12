@@ -73,6 +73,20 @@ public:
   virtual void do_oop(oop* p)       { do_oop_work(p); }
 };
 
+// Used to scan cards from the DCQS or the remembered sets during garbage collection.
+class G1ScanCardForMarkingClosure : public G1ScanClosureBase {
+  size_t& _heap_roots_found;
+public:
+  G1ScanCardForMarkingClosure(G1CollectedHeap* g1h,
+                    G1ParScanThreadState* pss,
+                    size_t& heap_roots_found) :
+    G1ScanClosureBase(g1h, pss), _heap_roots_found(heap_roots_found) { }
+
+  template <class T> void do_oop_work(T* p);
+  virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+  virtual void do_oop(oop* p)       { do_oop_work(p); }
+};
+
 // Used during Optional RS scanning to make sure we trim the queues in a timely manner.
 class G1ScanRSForOptionalClosure : public OopClosure {
   G1CollectedHeap* _g1h;
@@ -161,6 +175,17 @@ template <G1Barrier barrier, bool should_mark>
 class G1ParCopyClosure : public G1ParCopyHelper {
 public:
   G1ParCopyClosure(G1CollectedHeap* g1h, G1ParScanThreadState* par_scan_state) :
+      G1ParCopyHelper(g1h, par_scan_state) { }
+
+  template <class T> void do_oop_work(T* p);
+  virtual void do_oop(oop* p)       { do_oop_work(p); }
+  virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+};
+
+template <G1Barrier barrier, bool should_mark>
+class G1GroupHeapRootMarkingClosure : public G1ParCopyHelper {
+public:
+  G1GroupHeapRootMarkingClosure(G1CollectedHeap* g1h, G1ParScanThreadState* par_scan_state) :
       G1ParCopyHelper(g1h, par_scan_state) { }
 
   template <class T> void do_oop_work(T* p);
