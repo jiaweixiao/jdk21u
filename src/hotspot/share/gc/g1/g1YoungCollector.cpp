@@ -1038,12 +1038,14 @@ G1YoungCollector::G1YoungCollector(GCCause::Cause gc_cause) :
 {
 }
 
-class ClearRegionForMarkingClosure : public HeapRegionClosure {
-  ClearRegionForMarkingClosure():HeapRegionClosure(){}
+class ClearRegionsForMarkingClosure : public HeapRegionClosure {
+public:
+  ClearRegionsForMarkingClosure():HeapRegionClosure(){}
   bool do_heap_region(HeapRegion* r){
     r->conc_mark_stats()->set_in_marking_set(false);
+    return false;
   }
-}
+};
 
 class SelectRegionsForMarkingClosure : public HeapRegionClosure {
 public:
@@ -1066,12 +1068,15 @@ public:
     }
     return false;
   }
-}
+};
+
 void G1YoungCollector::clear_regions_for_group_marking(){
-  _g1h->heap_region_iterate();
+  ClearRegionsForMarkingClosure cl;
+  _g1h->heap_region_iterate(&cl);
 }
 void G1YoungCollector::select_regions_for_group_marking(){
-  _g1h->heap_region_iterate();
+  SelectRegionsForMarkingClosure cl;
+  _g1h->heap_region_iterate(&cl);
 }
 
 void G1YoungCollector::collect() {

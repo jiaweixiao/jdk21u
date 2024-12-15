@@ -886,7 +886,7 @@ class G1ScanHRForMarkingClosure : public HeapRegionClosure {
   }
 
   void do_claimed_block(uint const region_idx, CardValue* const dirty_l, CardValue* const dirty_r) {
-    _ct->change_dirty_cards_to(dirty_l, dirty_r, _scanned_card_value);
+    // _ct->change_dirty_cards_to(dirty_l, dirty_r, _scanned_card_value);
     size_t num_cards = dirty_r - dirty_l;
     _blocks_scanned++;
 
@@ -1874,7 +1874,7 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
         return false;
       }
 
-      _scan_state->add_all_dirty_region(r->hrm_index());
+      // _scan_state->add_all_dirty_region(r->hrm_index());
       merge_card_set_for_region(r);
 
       return false;

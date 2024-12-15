@@ -462,7 +462,7 @@ void G1CollectionSet::prepare_optional_regions(G1CollectionCandidateRegionList* 
 
 void G1CollectionSet::finalize_initial_collection_set(double target_pause_time_ms, G1SurvivorRegions* survivor) {
   double time_remaining_ms = finalize_young_part(target_pause_time_ms, survivor);
-  finalize_incr_old_part();
+  // finalize_incr_old_part();
   finalize_old_part(time_remaining_ms);
 }
 

@@ -206,8 +206,11 @@ inline void G1ScanCardForMarkingClosure::do_oop_work(T* p) {
   assert(r != nullptr, "should not be null?");
   assert(!r1->conc_mark_stats()->is_in_marking_set(), "should not be in marking set");
   if (r->conc_mark_stats()->is_in_marking_set()){
+    if(r1->conc_mark_stats()->is_in_marking_set()){
+      ShouldNotReachHere();
+    }
     //hua: todo mark in bitmap
-    _g1h->concurrent_mark()->mark_in_bitmap(_par_scan_state->worker_id(), obj);
+    // _g1h->concurrent_mark()->mark_in_bitmap(_par_scan_state->worker_id(), obj);
   }
 }
 
