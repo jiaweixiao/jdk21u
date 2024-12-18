@@ -886,7 +886,7 @@ class G1ScanHRForMarkingClosure : public HeapRegionClosure {
   }
 
   void do_claimed_block(uint const region_idx, CardValue* const dirty_l, CardValue* const dirty_r) {
-    // _ct->change_dirty_cards_to(dirty_l, dirty_r, _scanned_card_value);
+    _ct->change_dirty_cards_to(dirty_l, dirty_r, _scanned_card_value);
     size_t num_cards = dirty_r - dirty_l;
     _blocks_scanned++;
 
@@ -1933,7 +1933,7 @@ class G1MergeHeapRootsForMarkingTask : public WorkerTask {
       HeapRegion* hr = G1CollectedHeap::heap()->region_at_or_null(region_idx);
 
       if(hr != nullptr){
-        if(hr->conc_mark_stats()->is_in_marking_set()){
+        if(!hr->conc_mark_stats()->is_in_marking_set()){
           //hua: todo: for cards in the regions for conc marking, we don't need to scan cards in
           //them. However, we need to add the back to the dirty card queue.
           //For cards in regions not for conc marking, we should scan them.

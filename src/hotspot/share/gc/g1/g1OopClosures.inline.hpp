@@ -210,7 +210,7 @@ inline void G1ScanCardForMarkingClosure::do_oop_work(T* p) {
       ShouldNotReachHere();
     }
     //hua: todo mark in bitmap
-    // _g1h->concurrent_mark()->mark_in_bitmap(_par_scan_state->worker_id(), obj);
+    _g1h->concurrent_mark()->mark_in_bitmap(_par_scan_state->worker_id(), obj);
   }
 }
 
