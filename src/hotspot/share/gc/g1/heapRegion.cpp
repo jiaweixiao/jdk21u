@@ -228,6 +228,7 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
 
+  // Move to the beginning of the init of region.
   // [gc breakdown][region majflt][swapout garbage]
   // Remove afree region
   if (UseProfileRegionMajflt && _type.is_free()) {
@@ -247,6 +248,7 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
 
+  // Move to the beginning of the init of region.
   // [gc breakdown][region majflt][swapout garbage]
   // Remove afree region.
   if (UseProfileRegionMajflt && _type.is_free()) {

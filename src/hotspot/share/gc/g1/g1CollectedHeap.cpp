@@ -287,6 +287,15 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(HeapRegion* first_hr,
   uint first = first_hr->hrm_index();
   uint last = first + num_regions - 1;
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove a free region.
+  for (uint i = first; i <= last; ++i) {
+    HeapRegion *hr = region_at(i);
+    if (UseProfileRegionMajflt && hr->is_free()) {
+      os::region_majflt_add_region(i);
+    }
+  }
+
   // We need to initialize the region(s) we just discovered. This is
   // a bit tricky given that it can happen concurrently with
   // refinement threads refining cards on these regions and
@@ -1445,11 +1454,13 @@ jint G1CollectedHeap::initialize() {
   // 
   // Init majflt region bitmap
   if (UseProfileRegionMajflt) {
+    // assert((uintptr_t)_hrm.reserved().start() == (uintptr_t)heap_rs.base(), "Wrong heap base addr")
     os::init_majflt_region_bitmap((uintptr_t)_hrm.reserved().start(),
       _hrm.max_length(), HeapRegion::GrainBytes);
-    log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
-      p2i(_hrm.reserved().start()), _hrm.max_length());
   }
+  log_info(gc, init)("Heap Word Size %d", HeapWordSize);
+  log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
+    p2i(_hrm.reserved().start()), _hrm.max_length());
 
   // 6843694 - ensure that the maximum region index can fit
   // in the remembered set structures.
