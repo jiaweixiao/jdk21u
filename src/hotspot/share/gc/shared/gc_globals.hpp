@@ -113,6 +113,9 @@
   product(bool, UseProfileRegionMajflt, false,                              \
           "Enable profile region majflt")                                   \
                                                                             \
+  product(bool, UseMadvFree, false,                                         \
+          "Free free regions with madvise MADV_FREE")                       \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \

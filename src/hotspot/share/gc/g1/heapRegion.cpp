@@ -156,6 +156,10 @@ void HeapRegion::set_free() {
     os::region_majflt_remove_region(_hrm_index);
   }
 
+  if (UseMadvFree) {
+    os::free_page_frames((char*)_bottom, HeapRegion::GrainBytes);
+  }
+
   _type.set_free();
 }
 

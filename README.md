@@ -23,6 +23,9 @@ tracking.
 -Xms32g -Xmx32g -XX:+UseParallelGC -XX:+UseParallelFullScavengeGC -XX:NewSize=32g -XX:MaxNewSize=32g -XX:SurvivorRatio=1 -XX:-UseAdaptiveSizePolicy
 ```
 
+## Enable MADV_FREE
+Use `-XX:+UseMadvFree` to inform the kernel to **lazyfree** FREE regions with `MADV_FREE` when using G1.
+
 ## Profile majflt of young and old space
 ### Require linux kernel
 https://github.com/jiaweixiao/linux-5.11/tree/jdk-region-majflt?tab=readme-ov-file#profiling  

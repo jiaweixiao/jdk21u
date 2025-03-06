@@ -331,6 +331,8 @@ class os: AllStatic {
   static void current_thread_region_majflt(RegionMajfltStats* stats);
   static void dump_thread_region_majflt();
 
+  static void free_page_frames(char *addr, size_t bytes);
+
   // Return current local time in a string (YYYY-MM-DD HH:MM:SS).
   // It is MT safe, but not async-safe, as reading time zone
   // information may require a lock on some platforms.
