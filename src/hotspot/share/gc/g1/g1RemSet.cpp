@@ -1476,7 +1476,7 @@ bool G1RemSet::clean_card_before_refine(CardValue** const card_ptr_addr) {
   // In the normal (non-stale) case, the synchronization between the
   // enqueueing of the card and processing it here will have ensured
   // we see the up-to-date region type here.
-  if (!r->is_old_or_humongous()) {
+  if (!r->is_old_or_humongous() && !r->is_young()) {
     return false;
   }
 
