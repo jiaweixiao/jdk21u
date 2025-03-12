@@ -509,8 +509,8 @@ void before_exit(JavaThread* thread, bool halt) {
     // log_info(gc)("RegionMajflt(exit jvm) majflt %ld, in region %ld, out region %ld",
     //   proc_stats.majflt, proc_stats.majflt_in_region, proc_stats.majflt_out_region);
   
-    os::region_majflt_dump_bitmap();
-    os::free_majflt_region_bitmap();
+    // os::adc_advise_dump_bitmap();
+    os::adc_advise_free_bitmap();
   }
 
   // Print GC/heap related information.

@@ -485,6 +485,9 @@ oop G1ParScanThreadState::do_copy_to_survivor_space(G1HeapRegionAttr const regio
     return handle_evacuation_failure_par(old, old_mark, word_sz);
   }
 
+  // if (UseProfileRegionMajflt && PrefetchCopyIntervalInBytes > (int)word_sz)
+  //   os::adc_advise_alloc_range((uintptr_t)obj_ptr,
+  //           (uintptr_t)(obj_ptr+PrefetchCopyIntervalInBytes>>HeapWordSizeshift));
   // We're going to allocate linearly, so might as well prefetch ahead.
   Prefetch::write(obj_ptr, PrefetchCopyIntervalInBytes);
   Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(old), obj_ptr, word_sz);

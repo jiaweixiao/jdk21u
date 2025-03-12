@@ -288,11 +288,12 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(HeapRegion* first_hr,
   uint last = first + num_regions - 1;
 
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove a free region.
+  // Alloc these regions.
   for (uint i = first; i <= last; ++i) {
     HeapRegion *hr = region_at(i);
-    if (UseProfileRegionMajflt && hr->is_free()) {
-      os::region_majflt_add_region(i);
+    if (UseProfileRegionMajflt) {
+      // os::region_majflt_add_region(i);
+      os::adc_advise_alloc_range((uintptr_t)hr->bottom(), (uintptr_t)hr->end());
     }
   }
 
@@ -587,6 +588,7 @@ bool G1CollectedHeap::alloc_archive_regions(MemRegion range) {
     _old_set.add(r);
   };
 
+  // TODO alloc range
   iterate_regions_in_range(range, set_region_to_old);
   return true;
 }
@@ -1455,8 +1457,11 @@ jint G1CollectedHeap::initialize() {
   // Init majflt region bitmap
   if (UseProfileRegionMajflt) {
     // assert((uintptr_t)_hrm.reserved().start() == (uintptr_t)heap_rs.base(), "Wrong heap base addr")
-    os::init_majflt_region_bitmap((uintptr_t)_hrm.reserved().start(),
-      _hrm.max_length(), HeapRegion::GrainBytes);
+    os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
+            _hrm.max_length(), HeapRegion::GrainBytes);
+    // adc advise region size is equal to 4KB page.
+    // os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
+    //         8388608, 4096);
   }
   log_info(gc, init)("Heap Word Size %d", HeapWordSize);
   log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
@@ -1540,6 +1545,10 @@ jint G1CollectedHeap::initialize() {
   // region will complain that it cannot support allocations without
   // BOT updates. So we'll tag the dummy region as eden to avoid that.
   dummy_region->set_eden();
+  if (UseProfileRegionMajflt) {
+    os::adc_advise_alloc_range((uintptr_t)dummy_region->bottom(),
+            (uintptr_t)dummy_region->end());
+  }
   // Make sure it's full.
   dummy_region->set_top(dummy_region->end());
   G1AllocRegion::setup(this, dummy_region);
@@ -1556,11 +1565,11 @@ jint G1CollectedHeap::initialize() {
 
   G1InitLogger::print();
 
-  // [gc breakdown][region majflt][swapout garbage]
-  // Dump bitmap to dmesg
-  if (UseProfileRegionMajflt) {
-    os::region_majflt_dump_bitmap();
-  }
+  // // [gc breakdown][region majflt][swapout garbage]
+  // // Dump bitmap to dmesg
+  // if (UseProfileRegionMajflt) {
+  //   os::adc_advise_dump_bitmap();
+  // }
 
   return JNI_OK;
 }
@@ -2706,7 +2715,10 @@ void G1CollectedHeap::free_humongous_region(HeapRegion* hr,
                                             FreeRegionList* free_list) {
   assert(hr->is_humongous(), "this is only for humongous regions");
   hr->clear_humongous();
+  // jlong ts = os::rdtsc();
   free_region(hr, free_list);
+  // ts = os::rdtsc() - ts;
+  // log_info(gc)("H free region %.1fms", ts / 2400000.0);
 }
 
 void G1CollectedHeap::remove_from_old_gen_sets(const uint old_regions_removed,

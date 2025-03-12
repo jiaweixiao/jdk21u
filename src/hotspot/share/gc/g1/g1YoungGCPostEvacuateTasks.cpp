@@ -538,7 +538,10 @@ class FreeCSetClosure : public HeapRegionClosure {
     stats()->account_evacuated_region(r);
 
     // Free the region and its remembered set.
+    // jlong ts = os::rdtsc();
     _g1h->free_region(r, nullptr);
+    // ts = os::rdtsc() - ts;
+    // log_info(gc)("Y free region %.1fms", ts / 2400000.0);
     _g1h->hr_printer()->cleanup(r);
   }
 

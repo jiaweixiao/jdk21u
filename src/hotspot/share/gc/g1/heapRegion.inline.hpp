@@ -50,6 +50,12 @@ inline HeapWord* HeapRegion::allocate_impl(size_t min_word_size,
   size_t want_to_allocate = MIN2(available, desired_word_size);
   if (want_to_allocate >= min_word_size) {
     HeapWord* new_top = obj + want_to_allocate;
+    // [gc breakdown][region majflt][swapout garbage]
+    // alloc a range.
+    if (UseProfileRegionMajflt) {
+      // os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top);
+      os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)new_top);
+    }
     set_top(new_top);
     assert(is_object_aligned(obj) && is_object_aligned(new_top), "checking alignment");
     *actual_size = want_to_allocate;
@@ -75,6 +81,12 @@ inline HeapWord* HeapRegion::par_allocate_impl(size_t min_word_size,
       if (result == obj) {
         assert(is_object_aligned(obj) && is_object_aligned(new_top), "checking alignment");
         *actual_size = want_to_allocate;
+        // [gc breakdown][region majflt][swapout garbage]
+        // alloc a range.
+        if (UseProfileRegionMajflt) {
+          // os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top);
+          os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)new_top);
+        }
         return obj;
       }
     } else {
@@ -181,6 +193,8 @@ inline size_t HeapRegion::block_size(const HeapWord* p, HeapWord* const pb) cons
 }
 
 inline void HeapRegion::reset_compacted_after_full_gc(HeapWord* new_top) {
+  // if (UseProfileRegionMajflt)
+  //   os::adc_advise_alloc_range((uintptr_t)_top, (uintptr_t)new_top);
   set_top(new_top);
   // After a compaction the mark bitmap in a movable region is invalid.
   // But all objects are live, we get this by setting TAMS to bottom.

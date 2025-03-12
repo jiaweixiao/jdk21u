@@ -153,7 +153,8 @@ void HeapRegion::set_free() {
   // [gc breakdown][region majflt][swapout garbage]
   // Add a free region.
   if (UseProfileRegionMajflt) {
-    os::region_majflt_remove_region(_hrm_index);
+    // os::region_majflt_remove_region(_hrm_index);
+    os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   if (UseMadvFree)
@@ -167,10 +168,12 @@ void HeapRegion::set_free() {
 void HeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
 
+  // TODO: alloc range
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove afree region.
+  // Remove a free region.
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_eden();
@@ -179,10 +182,12 @@ void HeapRegion::set_eden() {
 void HeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
 
+  // TODO: skip?
   // [gc breakdown][region majflt][swapout garbage]
   // Convert survivor to eden
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_eden_pre_gc();
@@ -191,10 +196,12 @@ void HeapRegion::set_eden_pre_gc() {
 void HeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
 
+  // TODO: alloc range
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove afree region.
+  // Remove a free region.
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_survivor();
@@ -205,11 +212,13 @@ void HeapRegion::move_to_old() {
   bool pre_is_free = _type.is_free();
 
   if (_type.relabel_as_old()) {
-    // Change from [free, eden, survivor] to old region.
-    // Remove afree region.
-    if (UseProfileRegionMajflt && pre_is_free) {
-      os::region_majflt_add_region(_hrm_index);
-    }
+    // TODO: skip?
+    // // Change from [free, eden, survivor] to old region.
+    // // Remove a free region.
+    // if (UseProfileRegionMajflt && pre_is_free) {
+    //   // os::region_majflt_add_region(_hrm_index);
+    //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+    // }
 
     report_region_type_change(G1HeapRegionTraceType::Old);
   }
@@ -218,10 +227,12 @@ void HeapRegion::move_to_old() {
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
 
+  // TODO: alloc range
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove afree region.
+  // Remove a free region.
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_old();
@@ -235,9 +246,10 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
 
   // Move to the beginning of the init of region.
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove afree region
+  // Remove a free region
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_starts_humongous();
@@ -255,9 +267,10 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
 
   // Move to the beginning of the init of region.
   // [gc breakdown][region majflt][swapout garbage]
-  // Remove afree region.
+  // Remove a free region.
   if (UseProfileRegionMajflt && _type.is_free()) {
-    os::region_majflt_add_region(_hrm_index);
+    // os::region_majflt_add_region(_hrm_index);
+    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
   _type.set_continues_humongous();
