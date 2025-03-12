@@ -116,6 +116,9 @@
   product(bool, UseMadvFree, false,                                         \
           "Free free regions with madvise MADV_FREE")                       \
                                                                             \
+  product(bool, UseMadvDontneed, false,                                     \
+          "Free free regions with madvise MADV_DONTNEED")                   \
+                                                                            \
   product(bool, UseSerialGC, false,                                         \
           "Use the Serial garbage collector")                               \
                                                                             \
