@@ -138,6 +138,7 @@ HeapWord* G1AllocRegion::new_alloc_region_and_allocate(size_t word_size,
   trace("attempting region allocation");
   HeapRegion* new_alloc_region = allocate_new_region(word_size, force);
   if (new_alloc_region != nullptr) {
+  log_info(gc)("Alloc new region %u", new_alloc_region->hrm_index());
     new_alloc_region->reset_pre_dummy_top();
     // Need to do this before the allocation
     _used_bytes_before = new_alloc_region->used();
