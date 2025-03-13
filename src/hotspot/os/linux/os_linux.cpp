@@ -1661,6 +1661,11 @@ void os::adc_advise_free_range(uintptr_t start, uintptr_t end) {
   syscall(454, mode, start, end);
 }
 
+void os::adc_advise_is_free(uintptr_t addr) {
+  uint mode = 3;
+  syscall(454, mode, addr, 0);
+}
+
 // void os::region_majflt_remove_all_regions() {
 //   uint mode = 1;
 //   syscall(454, mode, 0);

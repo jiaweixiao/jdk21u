@@ -321,6 +321,7 @@ class os: AllStatic {
   // Kernel adc advise, bitmap for pages.
   static void adc_advise_alloc_range(uintptr_t start, uintptr_t end);
   static void adc_advise_free_range(uintptr_t start, uintptr_t end);
+  static void adc_advise_is_free(uintptr_t addr);
   // static void region_majflt_remove_all_regions(void);
   // static void region_majflt_remove_region(uint region_id);
   // static void region_majflt_add_region(uint region_id);

@@ -728,23 +728,28 @@ void JavaThread::thread_main_inner() {
 void JavaThread::post_run() {
   // [gc breakdown]
   long majflt, minflt, user_time, sys_time;
-  os::current_thread_majflt_minflt_and_cputime(&majflt, &minflt, &user_time, &sys_time);
 
-  // [gc breakdown][region majflt]
-  if (UseProfileRegionMajflt) {
-    RegionMajfltStats proc_stats;
-    os::current_thread_region_majflt(&proc_stats);
-    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, outheap=%ld, inheap=%ld, inheapfree=%ld",
-      this->name(), Thread::current()->osthread()->thread_id(),
-      majflt, minflt, user_time, sys_time,
-      proc_stats.swapout_out_heap,
-      proc_stats.swapout_in_heap,
-      proc_stats.swapout_in_heap_free);
-  } else {
-    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
-      this->name(), Thread::current()->osthread()->thread_id(),
-      majflt, minflt, user_time, sys_time);
+  {
+    ResourceMark rm;
+    os::current_thread_majflt_minflt_and_cputime(&majflt, &minflt, &user_time, &sys_time);
+
+    // [gc breakdown][region majflt]
+    if (UseProfileRegionMajflt) {
+      RegionMajfltStats proc_stats;
+      os::current_thread_region_majflt(&proc_stats);
+      log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms, outheap=%ld, inheap=%ld, inheapfree=%ld",
+        this->name(), Thread::current()->osthread()->thread_id(),
+        majflt, minflt, user_time, sys_time,
+        proc_stats.swapout_out_heap,
+        proc_stats.swapout_in_heap,
+        proc_stats.swapout_in_heap_free);
+    } else {
+      log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
+        this->name(), Thread::current()->osthread()->thread_id(),
+        majflt, minflt, user_time, sys_time);
+    }
   }
+
   this->exit(false);
   this->unregister_thread_stack_with_NMT();
   // Defer deletion to here to ensure 'this' is still referenceable in call_run

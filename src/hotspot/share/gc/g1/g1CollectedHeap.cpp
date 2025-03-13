@@ -1457,11 +1457,11 @@ jint G1CollectedHeap::initialize() {
   // Init majflt region bitmap
   if (UseProfileRegionMajflt) {
     // assert((uintptr_t)_hrm.reserved().start() == (uintptr_t)heap_rs.base(), "Wrong heap base addr")
-    os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
-            _hrm.max_length(), HeapRegion::GrainBytes);
-    // adc advise region size is equal to 4KB page.
     // os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
-    //         8388608, 4096);
+    //         _hrm.max_length(), HeapRegion::GrainBytes);
+    // adc advise region size is equal to 4KB page.
+    os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
+            8388608, 4096);
   }
   log_info(gc, init)("Heap Word Size %d", HeapWordSize);
   log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
