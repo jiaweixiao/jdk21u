@@ -729,9 +729,9 @@ void JavaThread::post_run() {
   long majflt, minflt, user_time, sys_time;
   {
     ResourceMark rm;
-    os::current_thread_majflt_and_cputime(&majflt, &user_time, &sys_time);
-    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, user=%ldms, sys=%ldms",
-      this->name(), Thread::current()->osthread()->thread_id(),majflt, user_time, sys_time);
+    os::current_thread_majflt_minflt_and_cputime(&majflt, &minflt, &user_time, &sys_time);
+    log_info(gc, thread)("Exit JavaThread %s(tid=%d), Majflt=%ld, Minflt=%ld, user=%ldms, sys=%ldms",
+      this->name(), Thread::current()->osthread()->thread_id(), majflt, minflt, user_time, sys_time);
   }
   this->exit(false);
   this->unregister_thread_stack_with_NMT();
