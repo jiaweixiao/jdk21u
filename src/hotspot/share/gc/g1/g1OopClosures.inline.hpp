@@ -169,6 +169,10 @@ inline void G1ScanCardClosure::do_oop_work(T* p) {
          p2i(p), _g1h->addr_to_region(p));
 
   const G1HeapRegionAttr region_attr = _g1h->region_attr(obj);
+  if (_g1h->heap_region_containing(p)->is_young() ) {
+    ShouldNotReachHere();
+  }
+
   if (region_attr.is_in_cset()) {
     // Since the source is always from outside the collection set, here we implicitly know
     // that this is a cross-region reference too.
