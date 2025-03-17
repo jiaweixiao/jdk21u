@@ -1477,6 +1477,7 @@ bool G1RemSet::clean_card_before_refine(CardValue** const card_ptr_addr) {
   // enqueueing of the card and processing it here will have ensured
   // we see the up-to-date region type here.
   if (!r->is_old_or_humongous() && !r->is_young()) {
+  // if (!r->is_old_or_humongous()) {
     return false;
   }
 
@@ -1516,6 +1517,9 @@ void G1RemSet::refine_card_concurrently(CardValue* const card_ptr,
   HeapWord* start = _ct->addr_for(card_ptr);
   // And find the region containing it.
   HeapRegion* r = _g1h->heap_region_containing(start);
+  if( r->is_empty() && r->is_young()){
+    ShouldNotReachHere();
+  }
   // This reload of the top is safe even though it happens after the full
   // fence, because top is stable for old and unfiltered humongous
   // regions, so it must return the same value as the previous load when

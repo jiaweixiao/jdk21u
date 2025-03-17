@@ -103,11 +103,14 @@ void G1DirtyCardQueueSet::enqueue(G1DirtyCardQueue& queue,
 void G1DirtyCardQueueSet::handle_zero_index(G1DirtyCardQueue& queue) {
   assert(queue.index() == 0, "precondition");
   BufferNode* old_node = exchange_buffer_with_new(queue);
+  log_info(gc)("handle zero index start");
   if (old_node != nullptr) {
     G1ConcurrentRefineStats* stats = queue.refinement_stats();
     stats->inc_dirtied_cards(buffer_size());
     handle_completed_buffer(old_node, stats);
   }
+  log_info(gc)("handle zero index end");
+
 }
 
 void G1DirtyCardQueueSet::handle_zero_index_for_thread(Thread* t) {
@@ -399,18 +402,21 @@ class G1RefineBufferedCards : public StackObj {
   }
 
   bool refine_cleaned_cards(size_t start_index) {
+    log_info(gc)("refine cleaned cards start");
     bool result = true;
     size_t i = start_index;
     for ( ; i < _node_buffer_size; ++i) {
       if (SuspendibleThreadSet::should_yield()) {
         redirty_unrefined_cards(i);
         result = false;
+        log_info(gc)("refine cleaned cards should yield");
         break;
       }
       _g1rs->refine_card_concurrently(_node_buffer[i], _worker_id);
     }
     _node->set_index(i);
     _stats->inc_refined_cards(i - start_index);
+    log_info(gc)("refine cleaned cards end");
     return result;
   }
 
@@ -482,6 +488,7 @@ void G1DirtyCardQueueSet::handle_refined_buffer(BufferNode* node,
 
 void G1DirtyCardQueueSet::handle_completed_buffer(BufferNode* new_node,
                                                   G1ConcurrentRefineStats* stats) {
+  log_info(gc)("handle completed buffer start");
   enqueue_completed_buffer(new_node);
 
   // No need for mutator refinement if number of cards is below limit.
@@ -494,16 +501,21 @@ void G1DirtyCardQueueSet::handle_completed_buffer(BufferNode* new_node,
   // When coming out of a safepoint, Java threads may be running before the
   // yield request (for non-Java threads) has been cleared.
   if (SuspendibleThreadSet::should_yield()) {
+    log_info(gc)("handle completed buffer should yield");
     return;
   }
 
   // Only Java threads perform mutator refinement.
   if (!Thread::current()->is_Java_thread()) {
+    log_info(gc)("handle completed buffer is java");
     return;
   }
 
   BufferNode* node = get_completed_buffer();
-  if (node == nullptr) return;     // Didn't get a buffer to process.
+  if (node == nullptr){ 
+    log_info(gc)("handle completed buffer no buffer");
+    return;     // Didn't get a buffer to process.
+  }
 
   // Refine cards in buffer.
 
@@ -511,8 +523,13 @@ void G1DirtyCardQueueSet::handle_completed_buffer(BufferNode* new_node,
   bool fully_processed = refine_buffer(node, worker_id, stats);
   _free_ids.release_par_id(worker_id); // release the id
 
+  if(!fully_processed){
+    log_info(gc)("paused");
+  }
+
   // Deal with buffer after releasing id, to let another thread use id.
   handle_refined_buffer(node, fully_processed);
+  log_info(gc)("handle completed buffer end");
 }
 
 bool G1DirtyCardQueueSet::refine_completed_buffer_concurrently(uint worker_id,
