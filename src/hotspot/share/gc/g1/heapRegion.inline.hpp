@@ -420,6 +420,45 @@ inline HeapWord* HeapRegion::oops_on_memregion_iterate_in_unparsable(MemRegion m
   }
 }
 
+template <class Closure>
+inline HeapWord* HeapRegion::oops_on_memregion_iterate_in_unparsable_with_nullptr(MemRegion mr, HeapWord* block_start, Closure* cl) {
+  HeapWord* const start = mr.start();
+  HeapWord* const end = mr.end();
+
+  G1CMBitMap* bitmap = G1CollectedHeap::heap()->concurrent_mark()->mark_bitmap();
+
+  HeapWord* cur = block_start;
+
+  while (true) {
+    // Using bitmap to locate marked objs in the unparsable area
+    cur = bitmap->get_next_marked_addr(cur, end);
+    if (cur == end) {
+      return end;
+    }
+    assert(bitmap->is_marked(cur), "inv");
+
+    oop obj = cast_to_oop(cur);
+    assert(oopDesc::is_oop(obj, true), "Not an oop at " PTR_FORMAT, p2i(cur));
+    if(!is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
+      return nullptr;
+    }
+    cur += obj->size();
+    bool is_precise;
+
+    if (!obj->is_objArray() || (cast_from_oop<HeapWord*>(obj) >= start && cur <= end)) {
+      obj->oop_iterate(cl);
+      is_precise = false;
+    } else {
+      obj->oop_iterate(cl, mr);
+      is_precise = true;
+    }
+
+    if (cur >= end) {
+      return is_precise ? end : cur;
+    }
+  }
+}
+
 // Applies cl to all reference fields of live objects in mr in non-humongous regions.
 //
 // For performance, the strategy here is to divide the work into two parts: areas
@@ -470,7 +509,72 @@ inline HeapWord* HeapRegion::oops_on_memregion_iterate(MemRegion mr, Closure* cl
   while (true) {
     oop obj = cast_to_oop(cur);
     assert(oopDesc::is_oop(obj, true), "Not an oop at " PTR_FORMAT, p2i(cur));
+    bool is_precise = false;
 
+    cur += obj->size();
+    // Process live object's references.
+
+    // Non-objArrays are usually marked imprecise at the object
+    // start, in which case we need to iterate over them in full.
+    // objArrays are precisely marked, but can still be iterated
+    // over in full if completely covered.
+    if (!obj->is_objArray() || (cast_from_oop<HeapWord*>(obj) >= start && cur <= end)) {
+      obj->oop_iterate(cl);
+    } else {
+      obj->oop_iterate(cl, mr);
+      is_precise = true;
+    }
+    if (cur >= end) {
+      return is_precise ? end : cur;
+    }
+  }
+}
+
+template <class Closure, bool in_gc_pause>
+inline HeapWord* HeapRegion::oops_on_memregion_iterate_with_nullptr(MemRegion mr, Closure* cl) {
+  // Cache the boundaries of the memory region in some const locals
+  HeapWord* const start = mr.start();
+  HeapWord* const end = mr.end();
+
+  // Snapshot the region's parsable_bottom.
+  HeapWord* const pb = in_gc_pause ? parsable_bottom() : parsable_bottom_acquire();
+
+  // Find the obj that extends onto mr.start().
+  //
+  // The BOT itself is stable enough to be read at any time as
+  //
+  // * during refinement the individual elements of the BOT are read and written
+  //   atomically and any visible mix of new and old BOT entries will eventually lead
+  //   to some (possibly outdated) object start.
+  //
+  // * during GC the BOT does not change while reading, and the objects corresponding
+  //   to these block starts are valid as "holes" are filled atomically wrt to
+  //   safepoints.
+  //
+  HeapWord* cur = block_start(start, pb);
+  if (!obj_in_parsable_area(start, pb)) {
+    // Limit the MemRegion to the part of the area to scan to the unparsable one as using the bitmap
+    // is slower than blindly iterating the objects.
+    MemRegion mr_in_unparsable(mr.start(), MIN2(mr.end(), pb));
+    cur = oops_on_memregion_iterate_in_unparsable_with_nullptr<Closure>(mr_in_unparsable, cur, cl);
+    // We might have scanned beyond end at this point because of imprecise iteration.
+    if (cur >= end || cur == nullptr) {
+      return cur;
+    }
+    // Parsable_bottom is always the start of a valid parsable object, so we must either
+    // have stopped at parsable_bottom, or already iterated beyond end. The
+    // latter case is handled above.
+    assert(cur == pb, "must be cur " PTR_FORMAT " pb " PTR_FORMAT, p2i(cur), p2i(pb));
+  }
+  assert(cur < top(), "must be cur " PTR_FORMAT " top " PTR_FORMAT, p2i(cur), p2i(top()));
+
+  // All objects >= pb are parsable. So we can just take object sizes directly.
+  while (true) {
+    oop obj = cast_to_oop(cur);
+    assert(oopDesc::is_oop(obj, true), "Not an oop at " PTR_FORMAT, p2i(cur));
+    if(!is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
+      return nullptr;
+    }
     bool is_precise = false;
 
     cur += obj->size();
@@ -511,7 +615,7 @@ HeapWord* HeapRegion::oops_on_memregion_seq_iterate_careful(MemRegion mr,
   // case there might be objects that have their classes unloaded and
   // therefore needs to be scanned using the bitmap.
 
-  return oops_on_memregion_iterate<Closure, in_gc_pause>(mr, cl);
+  return oops_on_memregion_iterate_with_nullptr<Closure, in_gc_pause>(mr, cl);
 }
 
 inline int HeapRegion::age_in_surv_rate_group() const {

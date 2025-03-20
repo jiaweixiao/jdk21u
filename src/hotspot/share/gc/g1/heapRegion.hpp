@@ -258,8 +258,15 @@ private:
   template <class Closure, bool in_gc_pause>
   inline HeapWord* oops_on_memregion_iterate(MemRegion mr, Closure* cl);
 
+  template <class Closure, bool in_gc_pause>
+  inline HeapWord* oops_on_memregion_iterate_with_nullptr(MemRegion mr, Closure* cl);
+  
+
   template <class Closure>
   inline HeapWord* oops_on_memregion_iterate_in_unparsable(MemRegion mr, HeapWord* block_start, Closure* cl);
+
+  template <class Closure>
+  inline HeapWord* oops_on_memregion_iterate_in_unparsable_with_nullptr(MemRegion mr, HeapWord* block_start, Closure* cl);
 
   // Iterate over the references covered by the given MemRegion in a humongous
   // object and apply the given closure to them.
