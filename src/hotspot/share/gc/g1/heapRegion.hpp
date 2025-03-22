@@ -481,7 +481,7 @@ public:
   // Reset the HeapRegion to default values and clear its remembered set.
   // If clear_space is true, clear the HeapRegion's memory.
   // Callers must ensure this is not called by multiple threads at the same time.
-  void hr_clear(bool clear_space);
+  double hr_clear(bool clear_space);
   // Clear the card table corresponding to this region.
   void clear_cardtable();
 

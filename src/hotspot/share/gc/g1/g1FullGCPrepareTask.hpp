@@ -41,6 +41,8 @@ class G1DetermineCompactionQueueClosure : public HeapRegionClosure {
   G1CollectedHeap* _g1h;
   G1FullCollector* _collector;
   uint _cur_worker;
+  unsigned long _madv_free_count;
+  double _madv_free_time;
 
   inline void free_empty_humongous_region(HeapRegion* hr);
 
@@ -56,6 +58,7 @@ class G1DetermineCompactionQueueClosure : public HeapRegionClosure {
 
 public:
   G1DetermineCompactionQueueClosure(G1FullCollector* collector);
+  ~G1DetermineCompactionQueueClosure();
 
   inline bool do_heap_region(HeapRegion* hr) override;
 };

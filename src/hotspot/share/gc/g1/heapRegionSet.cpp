@@ -368,6 +368,8 @@ FreeRegionList::FreeRegionList(const char* name, HeapRegionSetChecker* checker):
   HeapRegionSetBase(name, checker),
   _node_info(G1NUMA::numa()->is_enabled() ? new NodeInfo() : nullptr) {
 
+  _madv_free_count = 0;
+  _madv_free_time = 0;
   clear();
 }
 

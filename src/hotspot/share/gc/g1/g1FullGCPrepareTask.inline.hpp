@@ -33,8 +33,9 @@
 #include "gc/g1/g1FullGCScope.hpp"
 #include "gc/g1/heapRegion.inline.hpp"
 
-void G1DetermineCompactionQueueClosure::free_empty_humongous_region(HeapRegion* hr) {
-  _g1h->free_humongous_region(hr, nullptr);
+void G1DetermineCompactionQueueClosure::free_empty_humongous_region(HeapRegion* hr) {  
+  _madv_free_count += 1;
+  _madv_free_time += _g1h->free_humongous_region(hr, nullptr);
   _collector->set_free(hr->hrm_index());
   add_to_compaction_queue(hr);
 }

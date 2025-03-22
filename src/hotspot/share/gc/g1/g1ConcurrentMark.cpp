@@ -1366,12 +1366,15 @@ class G1ReclaimEmptyRegionsTask : public WorkerTask {
         if (hr->is_humongous()) {
           _humongous_regions_removed++;
           _g1h->free_humongous_region(hr, _local_cleanup_list);
+          // // [madv free]
+          // // Find dead page in region.
+          // log_info(gc)("Recl empty hum region %u", hr->hrm_index());
         } else {
           _old_regions_removed++;
-          // jlong ts = os::rdtsc();
           _g1h->free_region(hr, _local_cleanup_list);
-          // ts = os::rdtsc() - ts;
-          // log_info(gc)("O free region %.1fms", ts / 2400000.0);
+          // // [madv free]
+          // // Find dead page in region.
+          // log_info(gc)("Recl empty old region %u", hr->hrm_index());
         }
         hr->clear_cardtable();
         _g1h->concurrent_mark()->clear_statistics(hr);
@@ -1407,6 +1410,8 @@ public:
       _g1h->decrement_summary_bytes(cl.freed_bytes());
 
       _cleanup_list->add_ordered(&local_cleanup_list);
+      _cleanup_list->madv_free_count_add(local_cleanup_list.madv_free_count());
+      _cleanup_list->madv_free_time_add(local_cleanup_list.madv_free_time());
       assert(local_cleanup_list.is_empty(), "post-condition");
     }
   }
@@ -1421,6 +1426,10 @@ void G1ConcurrentMark::reclaim_empty_regions() {
 
   if (!empty_regions_list.is_empty()) {
     log_debug(gc)("Reclaimed %u empty regions", empty_regions_list.length());
+    log_info(gc)("Free Regions (cm recl empty): %lu, %.2fms", 
+            empty_regions_list.madv_free_count(),
+            empty_regions_list.madv_free_time()
+    );
     // Now print the empty regions list.
     _g1h->hr_printer()->cleanup(&empty_regions_list);
     // And actually make them available.

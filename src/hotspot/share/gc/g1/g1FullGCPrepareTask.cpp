@@ -41,7 +41,9 @@
 G1DetermineCompactionQueueClosure::G1DetermineCompactionQueueClosure(G1FullCollector* collector) :
   _g1h(G1CollectedHeap::heap()),
   _collector(collector),
-  _cur_worker(0) { }
+  _cur_worker(0),
+  _madv_free_count(0),
+  _madv_free_time(0) { }
 
 bool G1FullGCPrepareTask::G1CalculatePointersClosure::do_heap_region(HeapRegion* hr) {
   uint region_idx = hr->hrm_index();
@@ -52,6 +54,11 @@ bool G1FullGCPrepareTask::G1CalculatePointersClosure::do_heap_region(HeapRegion*
   prepare_for_compaction(hr);
 
   return false;
+}
+
+G1DetermineCompactionQueueClosure::~G1DetermineCompactionQueueClosure() {
+  log_info(gc)("Free Regions (full compact queue): %lu, %.2fms", 
+          _madv_free_count, _madv_free_time);
 }
 
 G1FullGCPrepareTask::G1FullGCPrepareTask(G1FullCollector* collector) :

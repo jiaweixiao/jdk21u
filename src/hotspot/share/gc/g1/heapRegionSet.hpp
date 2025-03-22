@@ -174,6 +174,9 @@ private:
 
   static uint _unrealistically_long_length;
 
+  unsigned long _madv_free_count;
+  double _madv_free_time;
+
   inline HeapRegion* remove_from_head_impl();
   inline HeapRegion* remove_from_tail_impl();
 
@@ -192,6 +195,11 @@ protected:
 public:
   FreeRegionList(const char* name, HeapRegionSetChecker* checker = nullptr);
   ~FreeRegionList();
+
+  inline unsigned long madv_free_count(void);
+  inline double madv_free_time(void);
+  inline void madv_free_count_add(unsigned long i);
+  inline void madv_free_time_add(double ts);
 
   void verify_list();
 

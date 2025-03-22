@@ -2697,28 +2697,29 @@ void G1CollectedHeap::clear_bitmap_for_region(HeapRegion* hr) {
   concurrent_mark()->clear_bitmap_for_region(hr);
 }
 
-void G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
+double G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
   assert(!hr->is_free(), "the region should not be free");
   assert(!hr->is_empty(), "the region should not be empty");
   assert(_hrm.is_available(hr->hrm_index()), "region should be committed");
 
   // Reset region metadata to allow reuse.
-  hr->hr_clear(true /* clear_space */);
+  double time_ms = hr->hr_clear(true /* clear_space */);
   _policy->remset_tracker()->update_at_free(hr);
 
   if (free_list != nullptr) {
     free_list->add_ordered(hr);
+    free_list->madv_free_count_add(1);
+    free_list->madv_free_time_add(time_ms);
   }
+
+  return time_ms;
 }
 
-void G1CollectedHeap::free_humongous_region(HeapRegion* hr,
+double G1CollectedHeap::free_humongous_region(HeapRegion* hr,
                                             FreeRegionList* free_list) {
   assert(hr->is_humongous(), "this is only for humongous regions");
   hr->clear_humongous();
-  // jlong ts = os::rdtsc();
-  free_region(hr, free_list);
-  // ts = os::rdtsc() - ts;
-  // log_info(gc)("H free region %.1fms", ts / 2400000.0);
+  return free_region(hr, free_list);
 }
 
 void G1CollectedHeap::remove_from_old_gen_sets(const uint old_regions_removed,

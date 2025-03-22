@@ -116,6 +116,9 @@
   product(bool, UseMadvFree, false,                                         \
           "Free free regions with madvise MADV_FREE")                       \
                                                                             \
+  product(bool, UseMadvFreePage, false,                                     \
+          "Free free regions with madvise MADV_FREE in page granularity")   \
+                                                                            \
   product(bool, UseMadvDontneed, false,                                     \
           "Free free regions with madvise MADV_DONTNEED")                   \
                                                                             \

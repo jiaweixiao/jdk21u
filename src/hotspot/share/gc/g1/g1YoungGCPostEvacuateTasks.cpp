@@ -136,6 +136,7 @@ class G1FreeHumongousRegionClosure : public HeapRegionIndexClosure {
   uint _humongous_objects_reclaimed;
   uint _humongous_regions_reclaimed;
   size_t _freed_bytes;
+  double _madv_free_time;
   G1CollectedHeap* _g1h;
 
   // Returns whether the given humongous object defined by the start region index
@@ -178,6 +179,7 @@ public:
     _humongous_objects_reclaimed(0),
     _humongous_regions_reclaimed(0),
     _freed_bytes(0),
+    _madv_free_time(0),
     _g1h(G1CollectedHeap::heap())
   {}
 
@@ -211,7 +213,7 @@ public:
       _freed_bytes += r->used();
       r->set_containing_set(nullptr);
       _humongous_regions_reclaimed++;
-      _g1h->free_humongous_region(r, nullptr);
+      _madv_free_time += _g1h->free_humongous_region(r, nullptr);
       _g1h->hr_printer()->cleanup(r);
     };
 
@@ -231,6 +233,10 @@ public:
   size_t bytes_freed() const {
     return _freed_bytes;
   }
+
+  double madv_free_time() {
+    return _madv_free_time;
+  }
 };
 
 #if COMPILER2_OR_JVMCI
@@ -246,18 +252,23 @@ public:
 class G1PostEvacuateCollectionSetCleanupTask2::EagerlyReclaimHumongousObjectsTask : public G1AbstractSubTask {
   uint _humongous_regions_reclaimed;
   size_t _bytes_freed;
+  double _madv_free_time;
 
 public:
   EagerlyReclaimHumongousObjectsTask() :
     G1AbstractSubTask(G1GCPhaseTimes::EagerlyReclaimHumongousObjects),
     _humongous_regions_reclaimed(0),
-    _bytes_freed(0) { }
+    _bytes_freed(0),
+    _madv_free_time(0) { }
 
   virtual ~EagerlyReclaimHumongousObjectsTask() {
     G1CollectedHeap* g1h = G1CollectedHeap::heap();
 
     g1h->remove_from_old_gen_sets(0, _humongous_regions_reclaimed);
     g1h->decrement_summary_bytes(_bytes_freed);
+    if (_humongous_regions_reclaimed > 0)
+      log_info(gc)("Free Regions (post evac recl hum): %u, %.2fms",
+              _humongous_regions_reclaimed, _madv_free_time);
   }
 
   double worker_cost() const override { return 1.0; }
@@ -273,6 +284,7 @@ public:
 
     _humongous_regions_reclaimed = cl.humongous_regions_reclaimed();
     _bytes_freed = cl.bytes_freed();
+    _madv_free_time = cl.madv_free_time();
   }
 };
 
@@ -420,6 +432,7 @@ class FreeCSetStats {
   size_t _failure_waste_words; // Wasted size in failed regions
   size_t _rs_length;           // Remembered set size
   uint _regions_freed;         // Number of regions freed
+  double _madv_free_time;      // Time of madv free in ms
 
 public:
   FreeCSetStats() :
@@ -429,7 +442,8 @@ public:
       _failure_used_words(0),
       _failure_waste_words(0),
       _rs_length(0),
-      _regions_freed(0) { }
+      _regions_freed(0),
+      _madv_free_time(0) { }
 
   void merge_stats(FreeCSetStats* other) {
     assert(other != nullptr, "invariant");
@@ -440,6 +454,7 @@ public:
     _failure_waste_words += other->_failure_waste_words;
     _rs_length += other->_rs_length;
     _regions_freed += other->_regions_freed;
+    _madv_free_time += other->_madv_free_time;
   }
 
   void report(G1CollectedHeap* g1h, G1EvacInfo* evacuation_info) {
@@ -454,6 +469,19 @@ public:
     policy->old_gen_alloc_tracker()->add_allocated_bytes_since_last_gc(_bytes_allocated_in_old_since_last_gc);
     policy->record_rs_length(_rs_length);
     policy->cset_regions_freed();
+  }
+
+
+  void madv_free_time_add(double i) {
+    _madv_free_time += i;
+  }
+
+  unsigned long madv_free_count(void) {
+    return _regions_freed;
+  }
+
+  double madv_free_time(void) {
+    return _madv_free_time;
   }
 
   void account_failed_region(HeapRegion* r) {
@@ -537,11 +565,15 @@ class FreeCSetClosure : public HeapRegionClosure {
     assert(!r->is_empty(), "Region %u is an empty region in the collection set.", r->hrm_index());
     stats()->account_evacuated_region(r);
 
+    // [madv free]
+    // Find dead page in region.
+    if (r->is_old())
+      log_info(gc)("Free Evac Old Region %u", r->hrm_index());
+
     // Free the region and its remembered set.
-    // jlong ts = os::rdtsc();
-    _g1h->free_region(r, nullptr);
-    // ts = os::rdtsc() - ts;
-    // log_info(gc)("Y free region %.1fms", ts / 2400000.0);
+    double time_ms = _g1h->free_region(r, nullptr);
+    _stats->madv_free_time_add(time_ms);
+
     _g1h->hr_printer()->cleanup(r);
   }
 
@@ -642,6 +674,9 @@ class G1PostEvacuateCollectionSetCleanupTask2::FreeCollectionSetTask : public G1
       total_stats.merge_stats(worker_stats(worker));
     }
     total_stats.report(_g1h, _evacuation_info);
+    log_info(gc)("Free Regions (post evac free cset): %lu, %.2fms", 
+            total_stats.madv_free_count(),
+            total_stats.madv_free_time());
   }
 
 public:

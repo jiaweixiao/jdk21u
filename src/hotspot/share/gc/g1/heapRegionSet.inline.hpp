@@ -271,4 +271,18 @@ inline uint FreeRegionList::length(uint node_index) const {
   }
 }
 
+inline unsigned long FreeRegionList::madv_free_count(void) {
+  return _madv_free_count;
+}
+inline double FreeRegionList::madv_free_time(void) {
+  return _madv_free_time;
+}
+inline void FreeRegionList::madv_free_count_add(unsigned long i) {
+  _madv_free_count += i;
+}
+inline void FreeRegionList::madv_free_time_add(double ts) {
+  _madv_free_time += ts;
+}
+
+
 #endif // SHARE_GC_G1_HEAPREGIONSET_INLINE_HPP

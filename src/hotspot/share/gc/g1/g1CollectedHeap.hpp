@@ -682,7 +682,7 @@ public:
   // in another way).
   // Callers must ensure they are the only one calling free on the given region
   // at the same time.
-  void free_region(HeapRegion* hr, FreeRegionList* free_list);
+  double free_region(HeapRegion* hr, FreeRegionList* free_list);
 
   // It dirties the cards that cover the block so that the post
   // write barrier never queues anything when updating objects on this
@@ -697,7 +697,7 @@ public:
   // list later).
   // The method assumes that only a single thread is ever calling
   // this for a particular region at once.
-  void free_humongous_region(HeapRegion* hr,
+  double free_humongous_region(HeapRegion* hr,
                              FreeRegionList* free_list);
 
   // Facility for allocating a fixed range within the heap and marking

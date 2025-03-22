@@ -116,18 +116,25 @@ void HeapRegion::unlink_from_list() {
   set_containing_set(nullptr);
 }
 
-void HeapRegion::hr_clear(bool clear_space) {
+double HeapRegion::hr_clear(bool clear_space) {
   set_top(bottom());
   clear_young_index_in_cset();
   clear_index_in_opt_cset();
   uninstall_surv_rate_group();
+
+  jlong ts = os::rdtsc();
   set_free();
+  ts = os::rdtsc() - ts;
+
   reset_pre_dummy_top();
 
   rem_set()->clear_locked();
 
   init_top_at_mark_start();
   if (clear_space) clear(SpaceDecorator::Mangle);
+
+  // in ms
+  return ts / 2400000.0;
 }
 
 void HeapRegion::clear_cardtable() {
@@ -159,7 +166,14 @@ void HeapRegion::set_free() {
 
   if (UseMadvFree)
     os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes);
-  else if (UseMadvDontneed)
+  else if (UseMadvFreePage) {
+    char* addr = (char*)_bottom;
+    char* last_page = (char*)_end - 4096;
+    while(addr <= last_page) {
+      os::free_page_frames(true, (char*)addr, 4096);
+      addr += 4096;
+    }
+  } else if (UseMadvDontneed)
     os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes);
 
   _type.set_free();
