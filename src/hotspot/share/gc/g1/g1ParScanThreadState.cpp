@@ -488,10 +488,6 @@ oop G1ParScanThreadState::do_copy_to_survivor_space(G1HeapRegionAttr const regio
   // if (UseProfileRegionMajflt) {
   //   os::adc_advise_alloc_range((uintptr_t)obj_ptr,
   //           (uintptr_t)(obj_ptr + word_sz));
-  //   os::adc_advise_alloc_range((uintptr_t)cast_from_oop<HeapWord*>(old),
-  //           (uintptr_t)(cast_from_oop<HeapWord*>(old) + word_sz));
-  //   os::adc_advise_is_free((uintptr_t)cast_from_oop<HeapWord*>(old));
-  //   os::adc_advise_is_free((uintptr_t)obj_ptr);
   // }
   // We're going to allocate linearly, so might as well prefetch ahead.
   Prefetch::write(obj_ptr, PrefetchCopyIntervalInBytes);

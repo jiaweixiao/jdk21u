@@ -54,7 +54,6 @@ inline HeapWord* HeapRegion::allocate_impl(size_t min_word_size,
     // alloc a range.
     if (UseProfileRegionMajflt) {
       os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top);
-      // os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)new_top);
     }
     set_top(new_top);
     assert(is_object_aligned(obj) && is_object_aligned(new_top), "checking alignment");
@@ -85,7 +84,6 @@ inline HeapWord* HeapRegion::par_allocate_impl(size_t min_word_size,
         // alloc a range.
         if (UseProfileRegionMajflt) {
           os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top);
-          // os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)new_top);
         }
         return obj;
       }
