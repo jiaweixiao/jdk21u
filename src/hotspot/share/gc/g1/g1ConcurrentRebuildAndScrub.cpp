@@ -77,6 +77,16 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
 
     const size_t ProcessingYieldLimitInWords = G1RebuildRemSetChunkSize / HeapWordSize;
 
+    // [madv free]
+    // Find dead page in region.
+    // First merge consecutive pages and record their length.
+    // Each element is the number of range with given length.
+    
+    // bins: 2^0, ..., 2^log2i(4KB pages per region)
+    uint* _dead_ranges_log2;
+    uint _dead_ranges_len;
+    uint _dead_pages;
+
     void reset_processed_words() {
       _processed_words = 0;
     }
@@ -196,6 +206,94 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
       return false;
     }
 
+    bool scan_and_scrub_to_pb_profiling(HeapRegion* hr, HeapWord* start, HeapWord* const limit) {
+      // [madv free]
+      // Find dead page in region.
+      // Here each worker claims one of the old generation regions.
+
+      // Ceiling of number of pages.
+      uint num_pages = (((uintptr_t)limit) - ((uintptr_t)start) + 4096 - 1) >> 12;
+      // Ceiling of length of bitmap array.
+      uint bitmap_len = (num_pages + BitsPerWord - 1) >> LogBitsPerWord;
+      // log_info(gc)("Dead num_pages %u bitmap_len %u", num_pages, bitmap_len);
+      BitMap::bm_word_t live_page_bits[bitmap_len] = {0};
+      BitMapView bm(live_page_bits, num_pages);
+
+      size_t obj_size, live_bytes = 0;
+      uint start_id, end_id;
+
+      while (start < limit) {
+        if (_bitmap->is_marked(start)) {
+          //  Live object, need to scan to rebuild remembered sets for this object.
+          obj_size = scan_object(hr, start);
+
+          if (num_pages > 0) {
+            // Obj size in heap word.
+            start_id = (((uintptr_t)start) - ((uintptr_t)hr->bottom())) >> 12;
+            // Ceiling of id
+            end_id = (((uintptr_t)start) - ((uintptr_t)hr->bottom()) + (obj_size << LogHeapWordSize) + 4096 - 1) >> 12;
+            assert(start_id != end_id, "Dead Pages of Region 1");
+            for (; start_id < end_id; start_id++) {
+              bm.set_bit(start_id);
+            }
+            live_bytes += obj_size << LogHeapWordSize;
+          }
+
+          start += obj_size;
+        } else {
+          // Found dead object (which klass has potentially been unloaded). Scrub to next
+          // marked object and continue.
+          start = scrub_to_next_live(hr, start, limit);
+        }
+
+        bool mark_aborted = yield_if_necessary();
+        if (mark_aborted) {
+          return true;
+        }
+      }
+      // If the last obj is not aligned to page,
+      // set it marked since it has objs above tams.
+      if (((uintptr_t)limit) % 4096)
+        bm.set_bit(num_pages - 1);
+
+      if (num_pages > 0) {
+        // First merge consecutive pages and record their length.
+        // Each element is the number of range with given length.
+        uint range_start = 0, range_len = 0;
+        bool is_prev_dead = false;
+        for (uint i = 0; i < num_pages; i++) {
+          if (bm.at(i) == false) { // Dead Page
+            if (is_prev_dead) // Continue dead range
+              range_len += 1;
+            else { // Start dead range
+              range_start = i;
+              range_len = 1;
+            }
+            is_prev_dead = true;
+          } else { // Live Page
+            if (is_prev_dead) { // Finish dead range
+              assert(log2i(range_len) < (int)_dead_ranges_len, "dead range len");
+              _dead_ranges_log2[log2i(range_len)] += 1;
+            }
+            is_prev_dead = false;
+          }
+        }
+        if (is_prev_dead) { // Last page is dead
+          assert(log2i(range_len) < (int)_dead_ranges_len, "dead range len");
+          _dead_ranges_log2[log2i(range_len)] += 1;
+        }
+
+        uint count = num_pages - bm.count_one_bits();
+        if (count > 0) {
+          _dead_pages += count;
+          // log_info(gc)("Dead Pages of Region %u: %u, live bytes %lu",
+          //         hr->hrm_index(), count, live_bytes);
+        }
+      }
+
+      return false;
+    }
+
     // Scan the given region from parsable_bottom to tars. Returns whether marking has
     // been aborted.
     bool scan_from_pb_to_tars(HeapRegion* hr, HeapWord* start, HeapWord* const limit) {
@@ -219,7 +317,12 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
       log_trace(gc, marking)("Scrub and rebuild region: " HR_FORMAT " pb: " PTR_FORMAT " TARS: " PTR_FORMAT,
                              HR_FORMAT_PARAMS(hr), p2i(pb), p2i(_cm->top_at_rebuild_start(hr->hrm_index())));
 
-      if (scan_and_scrub_to_pb(hr, hr->bottom(), pb)) {
+      bool ret;
+      if (UseProfileDeadPageInOld)
+        ret = scan_and_scrub_to_pb_profiling(hr, hr->bottom(), pb);
+      else
+        ret = scan_and_scrub_to_pb(hr, hr->bottom(), pb);
+      if (ret) {
         log_trace(gc, marking)("Scan and scrub aborted for region: %u", hr->hrm_index());
         return true;
       }
@@ -275,7 +378,30 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
       _bitmap(_cm->mark_bitmap()),
       _rebuild_closure(G1CollectedHeap::heap(), worker_id),
       _should_rebuild_remset(should_rebuild_remset),
-      _processed_words(0) { }
+      _processed_words(0),
+      _dead_pages(0) {
+        if (UseProfileDeadPageInOld) {
+          // bins: 2^0, ..., 2^log2i(4KB pages per region)
+          _dead_ranges_len = log2i(HeapRegion::GrainBytes >> 12) + 1;
+          _dead_ranges_log2 = NEW_C_HEAP_ARRAY(uint, _dead_ranges_len, mtGC);
+          memset(_dead_ranges_log2, 0, sizeof(uint) * _dead_ranges_len);
+        }
+      }
+
+    ~G1RebuildRSAndScrubRegionClosure() {
+      if (UseProfileDeadPageInOld)
+        FREE_C_HEAP_ARRAY(uint, _dead_ranges_log2);
+    }
+
+    uint dead_pages() {
+      return _dead_pages;
+    }
+
+    void dump_dead_ranges() {
+      for (uint i = 0; i < _dead_ranges_len; i++)
+        if (_dead_ranges_log2[i] > 0)
+          log_info(gc)("Dead Ranges bin [2^%u]: %u", i, _dead_ranges_log2[i]);
+    }
 
     bool do_heap_region(HeapRegion* hr) {
       // Avoid stalling safepoints and stop iteration if mark cycle has been aborted.
@@ -322,6 +448,10 @@ public:
     G1CollectedHeap* g1h = G1CollectedHeap::heap();
     G1RebuildRSAndScrubRegionClosure cl(_cm, _should_rebuild_remset, worker_id);
     g1h->heap_region_par_iterate_from_worker_offset(&cl, &_hr_claimer, worker_id);
+    if (UseProfileDeadPageInOld) {
+      log_info(gc)("Dead Pages of Worker %u: %u", worker_id, cl.dead_pages());
+      cl.dump_dead_ranges();
+    }
   }
 };
 

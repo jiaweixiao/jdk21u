@@ -113,6 +113,9 @@
   product(bool, UseProfileRegionMajflt, false,                              \
           "Enable profile region majflt")                                   \
                                                                             \
+  product(bool, UseProfileDeadPageInOld, false,                             \
+          "Count # of dead pages in old after CM but before Mixed GC")      \
+                                                                            \
   product(bool, UseMadvFree, false,                                         \
           "Free free regions with madvise MADV_FREE")                       \
                                                                             \
