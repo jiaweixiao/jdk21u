@@ -166,12 +166,13 @@ void HeapRegion::set_free() {
 
   if (UseMadvFree)
     os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes);
-  else if (UseMadvFreePage) {
+  else if (UseMadvFreePage > 0) {
+    uint step = 4096 * UseMadvFreePage;
     char* addr = (char*)_bottom;
-    char* last_page = (char*)_end - 4096;
+    char* last_page = (char*)_end - step;
     while(addr <= last_page) {
-      os::free_page_frames(true, (char*)addr, 4096);
-      addr += 4096;
+      os::free_page_frames(true, (char*)addr, step);
+      addr += step;
     }
   } else if (UseMadvDontneed)
     os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes);
