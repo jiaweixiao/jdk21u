@@ -439,7 +439,7 @@ inline HeapWord* HeapRegion::oops_on_memregion_iterate_in_unparsable_with_nullpt
 
     oop obj = cast_to_oop(cur);
     assert(oopDesc::is_oop(obj, true), "Not an oop at " PTR_FORMAT, p2i(cur));
-    if(!is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
+    if(!oopDesc::is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
       return nullptr;
     }
     cur += obj->size();
@@ -572,7 +572,7 @@ inline HeapWord* HeapRegion::oops_on_memregion_iterate_with_nullptr(MemRegion mr
   while (true) {
     oop obj = cast_to_oop(cur);
     assert(oopDesc::is_oop(obj, true), "Not an oop at " PTR_FORMAT, p2i(cur));
-    if(!is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
+    if(!oopDesc::is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr){
       return nullptr;
     }
     bool is_precise = false;
