@@ -305,6 +305,16 @@ HeapWord* ShenandoahFreeSet::allocate_contiguous(ShenandoahAllocRequest& req) {
       used_words = ShenandoahHeapRegion::region_size_words();
     }
 
+    // [gc breakdown][region majflt][swapout garbage]
+    if (UseProfileRegionMajflt) {
+      if(os::adc_advise_alloc_range((uintptr_t)r->bottom(),
+              (uintptr_t)(r->bottom() + used_words))) {
+        log_info(gc)("[allocate_contiguous] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+                p2i(r->bottom()), p2i(r->bottom() + used_words));
+        os::abort();
+      }
+    }
+
     r->set_top(r->bottom() + used_words);
 
     _mutator_free_bitmap.clear_bit(r->index());

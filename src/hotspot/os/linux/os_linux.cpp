@@ -1637,13 +1637,13 @@ void os::dump_accum_thread_majflt_minflt_and_cputime(const char *prefix) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // [gc breakdown][region majflt] profile majflt by region support
-void os::adc_advise_init_bitmap(uintptr_t base, size_t region_number, size_t region_size) {
-  syscall(453, base, region_number, region_size);
+int os::adc_advise_init_bitmap(uintptr_t base, size_t region_number, size_t region_size) {
+  return syscall(453, base, region_number, region_size);
 }
 
-void os::adc_advise_free_bitmap(void) {
+int os::adc_advise_free_bitmap(void) {
   uint mode = 0;
-  syscall(454, mode, 0, 0);
+  return syscall(454, mode, 0, 0);
 }
 
 void os::adc_advise_dump_bitmap() {
@@ -1651,19 +1651,19 @@ void os::adc_advise_dump_bitmap() {
   syscall(454, mode, 0, 0);
 }
 
-void os::adc_advise_alloc_range(uintptr_t start, uintptr_t end) {
+int os::adc_advise_alloc_range(uintptr_t start, uintptr_t end) {
   uint mode = 1;
-  syscall(454, mode, start, end);
+  return syscall(454, mode, start, end);
 }
 
-void os::adc_advise_free_range(uintptr_t start, uintptr_t end) {
+int os::adc_advise_free_range(uintptr_t start, uintptr_t end) {
   uint mode = 2;
-  syscall(454, mode, start, end);
+  return syscall(454, mode, start, end);
 }
 
-void os::adc_advise_is_free(uintptr_t addr) {
+int os::adc_advise_is_free(uintptr_t addr) {
   uint mode = 3;
-  syscall(454, mode, addr, 0);
+  return syscall(454, mode, addr, 0);
 }
 
 // void os::region_majflt_remove_all_regions() {
@@ -3205,7 +3205,8 @@ void os::pd_free_memory(char *addr, size_t bytes, size_t alignment_hint) {
 
 void os::free_page_frames(bool lazy, char *addr, size_t bytes) {
   if (lazy)
-    ::madvise(addr, bytes, MADV_FREE);
+    // ::madvise(addr, bytes, MADV_FREE);
+  syscall(455, addr, bytes, MADV_FREE, os::rdtsc());
   else
     ::madvise(addr, bytes, MADV_DONTNEED);
 }

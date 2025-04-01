@@ -46,6 +46,13 @@ HeapWord* ShenandoahHeapRegion::allocate(size_t size, ShenandoahAllocRequest::Ty
     assert(is_object_aligned(new_top), "new top breaks alignment: " PTR_FORMAT, p2i(new_top));
     assert(is_object_aligned(obj),     "obj is not aligned: "       PTR_FORMAT, p2i(obj));
 
+    // [gc breakdown][region majflt][swapout garbage]
+    if (UseProfileRegionMajflt) {
+      if(os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top)) {
+        log_info(gc)("[allocate] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(obj), p2i(new_top));
+        os::abort();
+      }
+    }
     return obj;
   } else {
     return nullptr;

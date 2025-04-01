@@ -341,6 +341,21 @@ jint ShenandoahHeap::initialize() {
     _free_set->rebuild();
   }
 
+  // 
+  // [gc breakdown][region majflt]
+  // Init page status bitmap in kernel
+  // 
+  if (UseProfileRegionMajflt) {
+    // adc advise region size is equal to 4KB page.
+    log_info(gc,init)("Init bitmap [" PTR_FORMAT ", " PTR_FORMAT "], grain %dB",
+            p2i(sh_rs.base()), p2i(sh_rs.base() + max_byte_size), 4096);
+    if(os::adc_advise_init_bitmap((uintptr_t)sh_rs.base(),
+            max_byte_size >> 12, 4096)) {
+      log_info(gc)("[initialize] fails adc_advise_init_bitmap");
+      os::abort();
+    }
+  }
+
   if (AlwaysPreTouch) {
     // For NUMA, it is important to pre-touch the storage under bitmaps with worker threads,
     // before initialize() below zeroes it with initializing thread. For any given region,

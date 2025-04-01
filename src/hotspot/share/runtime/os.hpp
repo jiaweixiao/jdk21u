@@ -315,13 +315,13 @@ class os: AllStatic {
   static void dump_accum_thread_majflt_minflt_and_cputime(const char *prefix);
 
   // [gc breakdown][region majflt]
-  static void adc_advise_init_bitmap(uintptr_t base, size_t region_number, size_t region_size);
-  static void adc_advise_free_bitmap(void);
+  static int adc_advise_init_bitmap(uintptr_t base, size_t region_number, size_t region_size);
+  static int adc_advise_free_bitmap(void);
   static void adc_advise_dump_bitmap(void);
   // Kernel adc advise, bitmap for pages.
-  static void adc_advise_alloc_range(uintptr_t start, uintptr_t end);
-  static void adc_advise_free_range(uintptr_t start, uintptr_t end);
-  static void adc_advise_is_free(uintptr_t addr);
+  static int adc_advise_alloc_range(uintptr_t start, uintptr_t end);
+  static int adc_advise_free_range(uintptr_t start, uintptr_t end);
+  static int adc_advise_is_free(uintptr_t addr);
   // static void region_majflt_remove_all_regions(void);
   // static void region_majflt_remove_region(uint region_id);
   // static void region_majflt_add_region(uint region_id);

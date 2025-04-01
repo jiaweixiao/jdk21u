@@ -92,6 +92,11 @@ void ShenandoahHeapRegion::make_regular_allocation() {
       do_commit();
     case _empty_committed:
       set_state(_regular);
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
     case _regular:
     case _pinned:
       return;
@@ -109,6 +114,11 @@ void ShenandoahHeapRegion::make_regular_bypass() {
     case _empty_uncommitted:
       do_commit();
     case _empty_committed:
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
     case _cset:
     case _humongous_start:
     case _humongous_cont:
@@ -132,6 +142,11 @@ void ShenandoahHeapRegion::make_humongous_start() {
       do_commit();
     case _empty_committed:
       set_state(_humongous_start);
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
       return;
     default:
       report_illegal_transition("humongous start allocation");
@@ -144,6 +159,11 @@ void ShenandoahHeapRegion::make_humongous_start_bypass() {
 
   switch (_state) {
     case _empty_committed:
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
     case _regular:
     case _humongous_start:
     case _humongous_cont:
@@ -161,6 +181,11 @@ void ShenandoahHeapRegion::make_humongous_cont() {
       do_commit();
     case _empty_committed:
      set_state(_humongous_cont);
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
       return;
     default:
       report_illegal_transition("humongous continuation allocation");
@@ -173,6 +198,11 @@ void ShenandoahHeapRegion::make_humongous_cont_bypass() {
 
   switch (_state) {
     case _empty_committed:
+      // // [gc breakdown][region majflt][swapout garbage]
+      // // Alloc a free region.
+      // if (UseProfileRegionMajflt) {
+      //   os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+      // }
     case _regular:
     case _humongous_start:
     case _humongous_cont:
@@ -249,6 +279,32 @@ void ShenandoahHeapRegion::make_trash() {
       // Reclaiming humongous regions
     case _regular:
       // Immediate region reclaim
+
+      // [gc breakdown][region majflt][swapout garbage]
+      // Add a free region.
+      if (UseProfileRegionMajflt) {
+        // os::region_majflt_remove_region(_hrm_index);
+        if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+          log_info(gc)("[make_trash] fails adc_advise_free_range, stt: " PTR_FORMAT " end: " PTR_FORMAT, p2i(_bottom), p2i(_end));
+          os::abort();
+        }
+      }
+
+      if (UseMadvFree)
+        os::free_page_frames(true, (char*)_bottom,
+                ShenandoahHeapRegion::RegionSizeBytes);
+      else if (UseMadvFreePage > 0) {
+        uint step = 4096 * UseMadvFreePage;
+        char* addr = (char*)_bottom;
+        char* last_page = (char*)_end - step;
+        while(addr <= last_page) {
+          os::free_page_frames(true, (char*)addr, step);
+          addr += step;
+        }
+      } else if (UseMadvDontneed)
+        os::free_page_frames(false, (char*)_bottom,
+                ShenandoahHeapRegion::RegionSizeBytes);
+
       set_state(_trash);
       return;
     default:

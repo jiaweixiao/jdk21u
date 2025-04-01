@@ -368,6 +368,15 @@ public:
     shenandoah_assert_not_forwarded(nullptr, p);
     _preserved_marks->push_if_necessary(p, p->mark());
     p->forward_to(cast_to_oop(_compact_point));
+    // [gc breakdown][region majflt][swapout garbage]
+    if (UseProfileRegionMajflt) {
+      if(os::adc_advise_alloc_range((uintptr_t)_compact_point,
+              (uintptr_t)(_compact_point + obj_size))) {
+        log_info(gc)("[ShenandoahPrepareForCompactionObjectClosure] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+                p2i(_compact_point), p2i(_compact_point + obj_size));
+        os::abort();
+      }
+    }
     _compact_point += obj_size;
   }
 };
@@ -455,6 +464,7 @@ void ShenandoahFullGC::calculate_target_humongous_objects() {
 
   size_t to_begin = heap->num_regions();
   size_t to_end = heap->num_regions();
+  HeapWord *new_obj;
 
   for (size_t c = heap->num_regions(); c > 0; c--) {
     ShenandoahHeapRegion *r = heap->get_region(c - 1);
@@ -475,8 +485,18 @@ void ShenandoahFullGC::calculate_target_humongous_objects() {
       if (start >= to_begin && start != r->index()) {
         // Fits into current window, and the move is non-trivial. Record the move then, and continue scan.
         _preserved_marks->get(0)->push_if_necessary(old_obj, old_obj->mark());
-        old_obj->forward_to(cast_to_oop(heap->get_region(start)->bottom()));
+        new_obj = heap->get_region(start)->bottom();
+        old_obj->forward_to(cast_to_oop(new_obj));
         to_end = start;
+        // [gc breakdown][region majflt][swapout garbage]
+        if (UseProfileRegionMajflt) {
+          if(os::adc_advise_alloc_range((uintptr_t)new_obj,
+            (uintptr_t)(new_obj + words_size))) {
+            log_info(gc)("[calculate_target_humongous_objects] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+              p2i(new_obj), p2i(new_obj + words_size));
+            os:abort();
+          }
+        }
         continue;
       }
     }
