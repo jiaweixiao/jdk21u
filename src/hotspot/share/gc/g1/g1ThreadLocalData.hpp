@@ -36,10 +36,19 @@ class G1ThreadLocalData {
 private:
   SATBMarkQueue _satb_mark_queue;
   G1DirtyCardQueue _dirty_card_queue;
+public:
+  volatile size_t old_to_any;
+  volatile size_t young_to_lower;
+  volatile size_t young_to_upper;
+
+private:
 
   G1ThreadLocalData() :
       _satb_mark_queue(&G1BarrierSet::satb_mark_queue_set()),
-      _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()) {}
+      _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()),
+      old_to_any(0),
+      young_to_lower(0),
+      young_to_upper(0), {}
 
   static G1ThreadLocalData* data(Thread* thread) {
     assert(UseG1GC, "Sanity");
@@ -89,6 +98,18 @@ public:
 
   static ByteSize dirty_card_queue_buffer_offset() {
     return dirty_card_queue_offset() + G1DirtyCardQueue::byte_offset_of_buf();
+  }
+
+  static ByteSize old_to_any_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, old_to_any);
+  }
+  
+  static ByteSize young_to_lower_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_lower);
+  }
+
+  static ByteSize young_to_upper_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper);
   }
 };
 

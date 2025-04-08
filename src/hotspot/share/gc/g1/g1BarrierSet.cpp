@@ -160,6 +160,17 @@ void G1BarrierSet::on_thread_attach(Thread* thread) {
 
 void G1BarrierSet::on_thread_detach(Thread* thread) {
   // Flush any deferred card marks.
+  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  G1ThreadLocalData* data = G1ThreadLocalData::data(thread);
+  // Atomic::add(g1h->_old_to_any, data->old_to_any);
+  // Atomic::add(g1h->_young_to_upper, data->young_to_upper);
+  // Atomic::add(g1h->_young_to_lower, data->young_to_lower);
+
+  log_info(gc)("old_to_any %lu, young_to_upper %lu, young_to_lower %lu",
+               data->old_to_any,
+               data->young_to_upper,
+               data->young_to_lower);
+
   CardTableBarrierSet::on_thread_detach(thread);
   {
     SATBMarkQueue& queue = G1ThreadLocalData::satb_mark_queue(thread);

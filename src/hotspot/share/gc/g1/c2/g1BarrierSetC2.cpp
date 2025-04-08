@@ -425,10 +425,17 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   const int index_offset  = in_bytes(G1ThreadLocalData::dirty_card_queue_index_offset());
   const int buffer_offset = in_bytes(G1ThreadLocalData::dirty_card_queue_buffer_offset());
 
+  const int old_to_any_offset = in_bytes(G1ThreadLocalData::old_to_any_offset());
+  const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
+  const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
+
   // Pointers into the thread
 
   Node* buffer_adr = __ AddP(no_base, tls, __ ConX(buffer_offset));
   Node* index_adr =  __ AddP(no_base, tls, __ ConX(index_offset));
+  Node* old_to_any_adr = __ AddP(no_base, tls, __ ConX(old_to_any_offset));
+  Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
+  Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
 
   // Now some values
   // Use ctrl to avoid hoisting these values past a safepoint, which could
@@ -467,7 +474,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
         // load the original value of the card
         Node* card_val = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
 
-        // __ if_then(card_val, BoolTest::ne, young_card, unlikely); {
+        __ if_then(card_val, BoolTest::ne, young_card, unlikely); {
           kit->sync_kit(ideal);
           kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
           __ sync_kit(kit);
@@ -476,7 +483,20 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
           __ if_then(card_val_reload, BoolTest::ne, dirty_card); {
             g1_mark_card(kit, ideal, card_adr, oop_store, alias_idx, index, index_adr, buffer, tf);
           } __ end_if();
-        // } __ end_if();
+          Node* old_to_any_value = __ load(__ ctrl(), old_to_any_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+          Node* next_old_to_any_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+          __ store(__ ctrl(), old_to_any_adr, next_old_to_any_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+        } __ else_(); {
+          __ if_then(adr, BoolTest::lt, val, unlikely); {
+            Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+            __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+          } __ else_(); {
+            Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+            __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+          }
+        } __ end_if();
       } __ end_if();
     } __ end_if();
   } else {

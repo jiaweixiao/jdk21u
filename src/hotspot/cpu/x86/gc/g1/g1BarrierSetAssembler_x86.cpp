@@ -310,7 +310,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   __ cmpb(Address(card_addr, 0), G1CardTable::g1_young_card_val());
   // __ jcc(Assembler::equal, done);
-
+   __ jcc(Assembler::equal, done);
   __ membar(Assembler::Membar_mask_bits(Assembler::StoreLoad));
   __ cmpb(Address(card_addr, 0), G1CardTable::dirty_card_val());
   __ jcc(Assembler::equal, done);
@@ -544,6 +544,7 @@ void G1BarrierSetAssembler::generate_c1_post_barrier_runtime_stub(StubAssembler*
 
   __ cmpb(Address(card_addr, 0), G1CardTable::g1_young_card_val());
   // __ jcc(Assembler::equal, done);
+   __ jcc(Assembler::equal, done);
 
   __ membar(Assembler::Membar_mask_bits(Assembler::StoreLoad));
   __ cmpb(Address(card_addr, 0), CardTable::dirty_card_val());
