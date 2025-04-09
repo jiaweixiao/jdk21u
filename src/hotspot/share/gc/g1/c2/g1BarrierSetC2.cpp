@@ -484,16 +484,16 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
             g1_mark_card(kit, ideal, card_adr, oop_store, alias_idx, index, index_adr, buffer, tf);
           } __ end_if();
           Node* old_to_any_value = __ load(__ ctrl(), old_to_any_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-          Node* next_old_to_any_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+          Node* next_old_to_any_value = kit->gvn().transform(new AddXNode(old_to_any_value, __ ConX(1)));
           __ store(__ ctrl(), old_to_any_adr, next_old_to_any_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
         } __ else_(); {
           __ if_then(adr, BoolTest::lt, val, unlikely); {
             Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-            Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+            Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
             __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
           } __ else_(); {
             Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-            Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
+            Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
             __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
           } __ end_if();
         } __ end_if();

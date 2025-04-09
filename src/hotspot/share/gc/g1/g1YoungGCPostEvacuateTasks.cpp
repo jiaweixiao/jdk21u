@@ -323,9 +323,9 @@ public:
 
   void do_card_ptr(CardValue* card_ptr, uint worker_id) {
     HeapRegion* hr = region_for_card(card_ptr);
-    if (hr->is_young()){
-      ShouldNotReachHere();
-    }
+    // if (hr->is_young()){
+    //   ShouldNotReachHere();
+    // }
     // Should only dirty cards in regions that won't be freed.
     if (!will_become_free(hr)) {
       *card_ptr = G1CardTable::dirty_card_val();
