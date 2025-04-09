@@ -495,7 +495,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
             Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
             Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(index, __ ConX(1)));
             __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
-          }
+          } __ end_if();
         } __ end_if();
       } __ end_if();
     } __ end_if();

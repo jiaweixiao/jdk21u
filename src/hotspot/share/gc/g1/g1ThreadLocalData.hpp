@@ -48,12 +48,15 @@ private:
       _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()),
       old_to_any(0),
       young_to_lower(0),
-      young_to_upper(0), {}
+      young_to_upper(0) {}
 
+public:
   static G1ThreadLocalData* data(Thread* thread) {
     assert(UseG1GC, "Sanity");
     return thread->gc_data<G1ThreadLocalData>();
   }
+
+private:
 
   static ByteSize satb_mark_queue_offset() {
     return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, _satb_mark_queue);
