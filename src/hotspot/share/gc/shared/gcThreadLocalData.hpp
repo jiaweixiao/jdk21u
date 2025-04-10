@@ -41,7 +41,7 @@
 // T, so that field offsets relative to Thread are small, which
 // often allows for a more compact instruction encoding.
 // typedef uint64_t GCThreadLocalData[43]; // 344 bytes
-typedef uint64_t GCThreadLocalData[100]; // 344 bytes
+typedef uint64_t GCThreadLocalData[150]; // 344 bytes
 
 
 #endif // SHARE_GC_SHARED_GCTHREADLOCALDATA_HPP

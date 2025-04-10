@@ -428,6 +428,11 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   const int old_to_any_offset = in_bytes(G1ThreadLocalData::old_to_any_offset());
   const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
   const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
+  const int young_to_upper_4_offset = in_bytes(G1ThreadLocalData::young_to_upper_4_offset());
+  const int young_to_upper_8_offset = in_bytes(G1ThreadLocalData::young_to_upper_8_offset());
+  const int young_to_upper_16_offset = in_bytes(G1ThreadLocalData::young_to_upper_16_offset());
+  const int young_to_upper_32_offset = in_bytes(G1ThreadLocalData::young_to_upper_32_offset());
+  const int young_to_upper_64_offset = in_bytes(G1ThreadLocalData::young_to_upper_64_offset());
 
   // Pointers into the thread
 
@@ -436,6 +441,11 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   Node* old_to_any_adr = __ AddP(no_base, tls, __ ConX(old_to_any_offset));
   Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
   Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
+  Node* young_to_upper_4_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_4_offset));
+  Node* young_to_upper_8_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_8_offset));
+  Node* young_to_upper_16_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_16_offset));
+  Node* young_to_upper_32_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_32_offset));
+  Node* young_to_upper_64_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_64_offset));
 
   // Now some values
   // Use ctrl to avoid hoisting these values past a safepoint, which could
@@ -491,6 +501,38 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
             Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
             Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
             __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            Node* diff_4 = __ URShiftX(__ XorX(adr, val), __ ConI(12 + 2));
+            Node* diff_8 = __ URShiftX(__ XorX(adr, val), __ ConI(12 + 3));
+            Node* diff_16 = __ URShiftX(__ XorX(adr, val), __ ConI(12 + 4));
+            Node* diff_32 = __ URShiftX(__ XorX(adr, val), __ ConI(12 + 5));
+            Node* diff_64 = __ URShiftX(__ XorX(adr, val), __ ConI(12 + 6));
+            // __ store(__ ctrl(), young_to_upper_4_adr, __ ConX(1), TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            __ if_then(diff_4, BoolTest::ne, zeroX); {
+              // Node* young_to_upper_4_value = __ load(__ ctrl(), young_to_upper_4_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+              // Node* next_young_to_upper_4_value = kit->gvn().transform(new AddXNode(young_to_upper_4_value, __ ConX(1)));
+              __ store(__ ctrl(), young_to_upper_4_adr, __ ConX(1), TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+              // __ store(__ ctrl(), young_to_upper_4_adr, next_young_to_upper_4_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            } __ end_if();
+            // __ if_then(diff_8, BoolTest::ne, zeroX); {
+            //   Node* young_to_upper_8_value = __ load(__ ctrl(), young_to_upper_8_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            //   Node* next_young_to_upper_8_value = kit->gvn().transform(new AddXNode(young_to_upper_8_value, __ ConX(1)));
+            //   __ store(__ ctrl(), young_to_upper_8_adr, next_young_to_upper_8_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            // } __ end_if();
+            // __ if_then(diff_16, BoolTest::ne, zeroX); {
+            //   Node* young_to_upper_16_value = __ load(__ ctrl(), young_to_upper_16_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            //   Node* next_young_to_upper_16_value = kit->gvn().transform(new AddXNode(young_to_upper_16_value, __ ConX(1)));
+            //   __ store(__ ctrl(), young_to_upper_16_adr, next_young_to_upper_16_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            // } __ end_if();
+            // __ if_then(diff_32, BoolTest::ne, zeroX); {
+            //   Node* young_to_upper_32_value = __ load(__ ctrl(), young_to_upper_32_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            //   Node* next_young_to_upper_32_value = kit->gvn().transform(new AddXNode(young_to_upper_32_value, __ ConX(1)));
+            //   __ store(__ ctrl(), young_to_upper_32_adr, next_young_to_upper_32_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            // } __ end_if();
+            // __ if_then(diff_64, BoolTest::ne, zeroX); {
+            //   Node* young_to_upper_64_value = __ load(__ ctrl(), young_to_upper_64_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            //   Node* next_young_to_upper_64_value = kit->gvn().transform(new AddXNode(young_to_upper_64_value, __ ConX(1)));
+            //   __ store(__ ctrl(), young_to_upper_64_adr, next_young_to_upper_64_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+            // } __ end_if();
           } __ else_(); {
             Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
             Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));

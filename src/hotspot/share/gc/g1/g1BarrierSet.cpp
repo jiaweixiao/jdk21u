@@ -166,9 +166,21 @@ void G1BarrierSet::on_thread_detach(Thread* thread) {
   // Atomic::add(g1h->_young_to_upper, data->young_to_upper);
   // Atomic::add(g1h->_young_to_lower, data->young_to_lower);
 
-  log_info(gc)("old_to_any %lu, young_to_upper %lu, young_to_lower %lu",
+  // log_info(gc)("old_to_any %lu, young_to_upper %lu, young_to_lower %lu",
+  //               data->old_to_any,
+  //               data->young_to_upper,
+  //               data->young_to_lower);
+  
+  log_info(gc)("old_to_any %lu, young_to_upper %lu, young_to_upper_4 %lu, "
+               "young_to_upper_8 %lu, young_to_upper_16 %lu, young_to_upper_32 %lu, "
+               "young_to_upper_64 %lu, young_to_lower %lu",
                data->old_to_any,
                data->young_to_upper,
+               data->young_to_upper_4,
+               data->young_to_upper_8,
+               data->young_to_upper_16,
+               data->young_to_upper_32,
+               data->young_to_upper_64,
                data->young_to_lower);
 
   CardTableBarrierSet::on_thread_detach(thread);

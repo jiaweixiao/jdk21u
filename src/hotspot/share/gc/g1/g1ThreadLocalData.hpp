@@ -40,6 +40,11 @@ public:
   volatile size_t old_to_any;
   volatile size_t young_to_lower;
   volatile size_t young_to_upper;
+  volatile size_t young_to_upper_4;
+  volatile size_t young_to_upper_8;
+  volatile size_t young_to_upper_16;
+  volatile size_t young_to_upper_32;
+  volatile size_t young_to_upper_64;
 
 private:
 
@@ -48,7 +53,12 @@ private:
       _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()),
       old_to_any(0),
       young_to_lower(0),
-      young_to_upper(0) {}
+      young_to_upper(0),
+      young_to_upper_4(0),
+      young_to_upper_8(0),
+      young_to_upper_16(0),
+      young_to_upper_32(0),
+      young_to_upper_64(0) {}
 
 public:
   static G1ThreadLocalData* data(Thread* thread) {
@@ -113,6 +123,22 @@ public:
 
   static ByteSize young_to_upper_offset() {
     return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper);
+  }
+
+  static ByteSize young_to_upper_4_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_4);
+  }
+  static ByteSize young_to_upper_8_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_8);
+  }
+  static ByteSize young_to_upper_16_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_16);
+  }
+  static ByteSize young_to_upper_32_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_32);
+  }
+  static ByteSize young_to_upper_64_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_64);
   }
 };
 
