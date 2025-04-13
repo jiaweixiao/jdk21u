@@ -32,6 +32,7 @@ GCStats::GCStats() : _avg_promoted(new AdaptivePaddedNoZeroDevAverage(AdaptiveSi
 GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0), _stt_sys_ms(0) {
   // Allocation in thread-local resource area
   if (UseProfileRegionMajflt) {
+    ResourceMark rm;
     _stt_sys_stats = NEW_RESOURCE_OBJ(SysRegionMajfltStats);
     _end_sys_stats = NEW_RESOURCE_OBJ(SysRegionMajfltStats);
     // _stt_proc_stats = NEW_RESOURCE_OBJ(RegionMajfltStats);
@@ -41,6 +42,7 @@ GCMajfltStats::GCMajfltStats() : _stt_majflt(0), _stt_minflt(0), _stt_user_ms(0)
 
 GCMajfltStats::~GCMajfltStats() {
   if (UseProfileRegionMajflt) {
+    ResourceMark rm;
     FREE_RESOURCE_ARRAY(SysRegionMajfltStats, _stt_sys_stats, 1);
     FREE_RESOURCE_ARRAY(SysRegionMajfltStats, _end_sys_stats, 1);
     // FREE_RESOURCE_ARRAY(RegionMajfltStats, _stt_proc_stats, 1);

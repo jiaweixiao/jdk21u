@@ -1572,6 +1572,7 @@ void os::get_accum_majflt_minflt_and_cputime(long* majflt, long* minflt, long* u
 }
 
 void os::current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, long* user_time, long* sys_time) {
+  ResourceMark rm;
   char proc_name[64];
   RegionMajfltStats stats;
   snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", Thread::current()->osthread()->thread_id());
@@ -1585,6 +1586,7 @@ void os::current_thread_majflt_minflt_and_cputime(long* majflt, long* minflt, lo
 void os::dump_current_thread_majflt_minflt_and_cputime(const char *prefix) {
   pid_t tid;
   char proc_name[64];
+  ResourceMark rm;
   RegionMajfltStats stats;
 
   for (JavaThreadIteratorWithHandle jtiwh; JavaThread *jt = jtiwh.next(); ) {
@@ -1706,6 +1708,7 @@ void os::accum_proc_region_majflt(RegionMajfltStats* stats) {
 }
 
 void os::current_thread_region_majflt(RegionMajfltStats* stats) {
+  ResourceMark rm;
   char proc_name[64];
   snprintf(proc_name, 64, "/proc/self/task/%d/statmajflt", Thread::current()->osthread()->thread_id());
   proc_statmajflt(proc_name, stats);
