@@ -143,14 +143,14 @@ void G1FullGCCompactTask::free_non_overlapping_regions(uint src_start_idx, uint 
   uint non_overlapping_start = dest_end_idx < src_start_idx ?
                                src_start_idx :
                                dest_end_idx + 1;
-  double time_ms = 0;
+  double time_ns = 0;
 
   for (uint i = non_overlapping_start; i <= src_end_idx; ++i) {
     HeapRegion* hr = _g1h->region_at(i);
-    time_ms += _g1h->free_humongous_region(hr, nullptr);
+    time_ns += _g1h->free_humongous_region(hr, nullptr);
   }
-  log_info(gc)("Free Regions (full non overlap): %u, %.2fms",
+  log_info(gc)("Free Regions (full non overlap): %u, %.1fns",
           src_end_idx-non_overlapping_start+1,
-          time_ms
+          time_ns
   );
 }

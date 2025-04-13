@@ -277,6 +277,12 @@ private:
   inline HeapWord* next_live_in_unparsable(G1CMBitMap* bitmap, const HeapWord* p, HeapWord* limit) const;
   inline HeapWord* next_live_in_unparsable(const HeapWord* p, HeapWord* limit) const;
 
+  // [gc breakdown][region majflt][swapout garbage]
+  // Save stats of madv cost of free regions.
+  size_t _madv_count;
+  size_t _madv_cycles;
+  size_t _madv_exit_cycles;
+
 public:
   HeapRegion(uint hrm_index,
              G1BlockOffsetTable* bot,
@@ -291,7 +297,13 @@ public:
   // resets the BOT for that heap region.
   // The default values for clear_space means that we will do the clearing if
   // there's clearing to be done ourselves. We also always mangle the space.
-  void initialize(bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
+  double initialize(bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Get stats of madv cost of free regions.
+  size_t get_madv_count() const { return _madv_count; }
+  size_t get_madv_cycles() const { return _madv_cycles; }
+  size_t get_madv_exit_cycles() const { return _madv_exit_cycles; }
 
   static int    LogOfHRGrainBytes;
   static int    LogCardsPerRegion;
@@ -400,7 +412,7 @@ public:
 
   bool is_old_or_humongous() const { return _type.is_old_or_humongous(); }
 
-  void set_free();
+  double set_free();
 
   void set_eden();
   void set_eden_pre_gc();

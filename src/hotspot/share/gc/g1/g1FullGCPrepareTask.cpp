@@ -57,7 +57,7 @@ bool G1FullGCPrepareTask::G1CalculatePointersClosure::do_heap_region(HeapRegion*
 }
 
 G1DetermineCompactionQueueClosure::~G1DetermineCompactionQueueClosure() {
-  log_info(gc)("Free Regions (full compact queue): %lu, %.2fms", 
+  log_info(gc)("Free Regions (full compact queue): %lu, %.1fns", 
           _madv_free_count, _madv_free_time);
 }
 

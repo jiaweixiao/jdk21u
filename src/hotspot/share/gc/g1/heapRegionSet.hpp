@@ -175,7 +175,7 @@ private:
   static uint _unrealistically_long_length;
 
   unsigned long _madv_free_count;
-  double _madv_free_time;
+  double _madv_free_time; // in ns
 
   inline HeapRegion* remove_from_head_impl();
   inline HeapRegion* remove_from_tail_impl();

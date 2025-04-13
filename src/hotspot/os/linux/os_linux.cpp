@@ -3206,12 +3206,19 @@ void os::pd_free_memory(char *addr, size_t bytes, size_t alignment_hint) {
   }
 }
 
-void os::free_page_frames(bool lazy, char *addr, size_t bytes) {
-  if (lazy)
+size_t os::free_page_frames(bool lazy, char *addr, size_t bytes, size_t *exit_sys) {
+  size_t ts_stt = 0, ts_exit = 0, ts_end = 0;
+  if (lazy) {
+    ts_stt = os::rdtsc();
     // ::madvise(addr, bytes, MADV_FREE);
-  syscall(455, addr, bytes, MADV_FREE, os::rdtsc());
-  else
+    ts_exit = syscall(455, addr, bytes, MADV_FREE, ts_stt);
+    ts_end = os::rdtsc();
+    if (exit_sys) *exit_sys = ts_end - ts_exit;
+  } else
     ::madvise(addr, bytes, MADV_DONTNEED);
+
+  // in cycles
+  return ts_end - ts_stt;
 }
 
 void os::numa_make_global(char *addr, size_t bytes) {

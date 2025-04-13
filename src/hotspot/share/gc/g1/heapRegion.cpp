@@ -122,9 +122,7 @@ double HeapRegion::hr_clear(bool clear_space) {
   clear_index_in_opt_cset();
   uninstall_surv_rate_group();
 
-  jlong ts = os::rdtsc();
-  set_free();
-  ts = os::rdtsc() - ts;
+  double ts = set_free();
 
   reset_pre_dummy_top();
 
@@ -133,8 +131,8 @@ double HeapRegion::hr_clear(bool clear_space) {
   init_top_at_mark_start();
   if (clear_space) clear(SpaceDecorator::Mangle);
 
-  // in ms
-  return ts / 2400000.0;
+  // in ns
+  return ts;
 }
 
 void HeapRegion::clear_cardtable() {
@@ -154,30 +152,41 @@ double HeapRegion::calc_gc_efficiency() {
   return (double)reclaimable_bytes() / region_elapsed_time_ms;
 }
 
-void HeapRegion::set_free() {
+double HeapRegion::set_free() {
+  size_t ts = 0, ts_exit_sys = 0, tmp;
   report_region_type_change(G1HeapRegionTraceType::Free);
 
   // [gc breakdown][region majflt][swapout garbage]
   // Add a free region.
   if (UseProfileRegionMajflt) {
-    // os::region_majflt_remove_region(_hrm_index);
     os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end);
   }
 
-  if (UseMadvFree)
-    os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes);
-  else if (UseMadvFreePage > 0) {
+  if (UseMadvFree) {
+    ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
+    ts_exit_sys = tmp;
+  } else if (UseMadvFreePage > 0) {
     uint step = 4096 * UseMadvFreePage;
     char* addr = (char*)_bottom;
     char* last_page = (char*)_end - step;
     while(addr <= last_page) {
-      os::free_page_frames(true, (char*)addr, step);
+      ts += os::free_page_frames(true, (char*)addr, step, &tmp);
+      ts_exit_sys += tmp;
       addr += step;
     }
   } else if (UseMadvDontneed)
-    os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes);
+    ts = os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes, NULL);
 
   _type.set_free();
+
+  if (ts > 0) {
+    Atomic::add(&_madv_count, (size_t)1, memory_order_relaxed);
+    Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
+    Atomic::add(&_madv_exit_cycles, ts_exit_sys, memory_order_relaxed);
+  }
+
+  // in ns
+  return ts / 2.4;
 }
 
 void HeapRegion::set_eden() {
@@ -327,7 +336,10 @@ HeapRegion::HeapRegion(uint hrm_index,
   _young_index_in_cset(-1),
   _surv_rate_group(nullptr),
   _age_index(G1SurvRateGroup::InvalidAgeIndex),
-  _node_index(G1NUMA::UnknownNodeIndex)
+  _node_index(G1NUMA::UnknownNodeIndex),
+  _madv_count(0),
+  _madv_cycles(0),
+  _madv_exit_cycles(0)
 {
   assert(Universe::on_page_boundary(mr.start()) && Universe::on_page_boundary(mr.end()),
          "invalid space boundaries");
@@ -336,7 +348,7 @@ HeapRegion::HeapRegion(uint hrm_index,
   initialize();
 }
 
-void HeapRegion::initialize(bool clear_space, bool mangle_space) {
+double HeapRegion::initialize(bool clear_space, bool mangle_space) {
   assert(_rem_set->is_empty(), "Remembered set must be empty");
 
   if (clear_space) {
@@ -345,7 +357,7 @@ void HeapRegion::initialize(bool clear_space, bool mangle_space) {
 
   set_top(bottom());
 
-  hr_clear(false /*clear_space*/);
+  return hr_clear(false /*clear_space*/);
 }
 
 void HeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {

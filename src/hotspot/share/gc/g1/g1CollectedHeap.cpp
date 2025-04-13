@@ -1585,6 +1585,7 @@ void G1CollectedHeap::stop() {
   _cr->stop();
   _service_thread->stop();
   _cm_thread->stop();
+  _hrm.dump_madv_cost();
 }
 
 void G1CollectedHeap::safepoint_synchronize_begin() {
@@ -2703,16 +2704,16 @@ double G1CollectedHeap::free_region(HeapRegion* hr, FreeRegionList* free_list) {
   assert(_hrm.is_available(hr->hrm_index()), "region should be committed");
 
   // Reset region metadata to allow reuse.
-  double time_ms = hr->hr_clear(true /* clear_space */);
+  double time_ns = hr->hr_clear(true /* clear_space */);
   _policy->remset_tracker()->update_at_free(hr);
 
   if (free_list != nullptr) {
     free_list->add_ordered(hr);
     free_list->madv_free_count_add(1);
-    free_list->madv_free_time_add(time_ms);
+    free_list->madv_free_time_add(time_ns);
   }
 
-  return time_ms;
+  return time_ns;
 }
 
 double G1CollectedHeap::free_humongous_region(HeapRegion* hr,
@@ -2859,6 +2860,9 @@ private:
 
   size_t _total_used;
 
+  unsigned long _madv_free_count;
+  double _madv_free_time; // in ns
+
 public:
   RebuildRegionSetsClosure(bool free_list_only,
                            HeapRegionSet* old_set,
@@ -2871,13 +2875,21 @@ public:
       assert(_old_set->is_empty(), "pre-condition");
       assert(_humongous_set->is_empty(), "pre-condition");
     }
+    _madv_free_count = 0;
+    _madv_free_time = 0;
+  }
+
+  ~RebuildRegionSetsClosure() {
+    log_info(gc)("Free Regions (rebuild region sets)): %lu, %.1fns", 
+            _madv_free_count, _madv_free_time);
   }
 
   bool do_heap_region(HeapRegion* r) {
     if (r->is_empty()) {
       assert(r->rem_set()->is_empty(), "Empty regions should have empty remembered sets.");
       // Add free regions to the free list
-      r->set_free();
+      _madv_free_time += r->set_free();
+      _madv_free_count += 1;
       _hrm->insert_into_free_list(r);
     } else if (!_free_list_only) {
       assert(r->rem_set()->is_empty(), "At this point remembered sets must have been cleared.");

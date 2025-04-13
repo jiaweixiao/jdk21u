@@ -1426,7 +1426,7 @@ void G1ConcurrentMark::reclaim_empty_regions() {
 
   if (!empty_regions_list.is_empty()) {
     log_debug(gc)("Reclaimed %u empty regions", empty_regions_list.length());
-    log_info(gc)("Free Regions (cm recl empty): %lu, %.2fms", 
+    log_info(gc)("Free Regions (cm recl empty): %lu, %.1fns", 
             empty_regions_list.madv_free_count(),
             empty_regions_list.madv_free_time()
     );

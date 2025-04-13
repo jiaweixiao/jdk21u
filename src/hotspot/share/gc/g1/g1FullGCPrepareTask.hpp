@@ -42,7 +42,7 @@ class G1DetermineCompactionQueueClosure : public HeapRegionClosure {
   G1FullCollector* _collector;
   uint _cur_worker;
   unsigned long _madv_free_count;
-  double _madv_free_time;
+  double _madv_free_time; // in ns
 
   inline void free_empty_humongous_region(HeapRegion* hr);
 

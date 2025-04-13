@@ -216,15 +216,18 @@ void HeapRegionManager::uncommit_regions(uint start, uint num_regions) {
 }
 
 void HeapRegionManager::initialize_regions(uint start, uint num_regions) {
+  double ts = 0;
   for (uint i = start; i < start + num_regions; i++) {
     assert(is_available(i), "Just made region %u available but is apparently not.", i);
     HeapRegion* hr = at(i);
 
-    hr->initialize();
+    ts += hr->initialize();
     hr->set_node_index(G1NUMA::numa()->index_for_region(hr));
     insert_into_free_list(hr);
     G1CollectedHeap::heap()->hr_printer()->active(hr);
   }
+  log_info(gc)("Free Regions (init regions): %u, %.1fns", 
+          num_regions, ts);
 }
 
 void HeapRegionManager::activate_regions(uint start, uint num_regions) {
@@ -496,6 +499,24 @@ HeapRegion* HeapRegionManager::next_region_in_heap(const HeapRegion* r) const {
     }
   }
   return nullptr;
+}
+
+void HeapRegionManager::dump_madv_cost() const {
+  uint len = reserved_length();
+  size_t count = 0;
+  size_t time_cycles = 0;
+  size_t time_exit_cycles = 0;
+  for (uint i = 0; i < len; i++) {
+    if (!is_available(i)) {
+      continue;
+    }
+    guarantee(at(i) != nullptr, "Tried to access region %u that has a null HeapRegion*", i);
+    count += at(i)->get_madv_count();
+    time_cycles += at(i)->get_madv_cycles();
+    time_exit_cycles += at(i)->get_madv_exit_cycles();
+  }
+  log_info(gc)("Free Regions (sum): %lu, %.1fns, exit %.1fns", 
+          count, time_cycles / 2.4, time_exit_cycles / 2.4);
 }
 
 void HeapRegionManager::iterate(HeapRegionClosure* blk) const {
