@@ -368,15 +368,6 @@ public:
     shenandoah_assert_not_forwarded(nullptr, p);
     _preserved_marks->push_if_necessary(p, p->mark());
     p->forward_to(cast_to_oop(_compact_point));
-    // [gc breakdown][region majflt][swapout garbage]
-    if (UseProfileRegionMajflt) {
-      if(os::adc_advise_alloc_range((uintptr_t)_compact_point,
-              (uintptr_t)(_compact_point + obj_size))) {
-        log_info(gc)("[ShenandoahPrepareForCompactionObjectClosure] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
-                p2i(_compact_point), p2i(_compact_point + obj_size));
-        os::abort();
-      }
-    }
     _compact_point += obj_size;
   }
 };
@@ -488,15 +479,6 @@ void ShenandoahFullGC::calculate_target_humongous_objects() {
         new_obj = heap->get_region(start)->bottom();
         old_obj->forward_to(cast_to_oop(new_obj));
         to_end = start;
-        // [gc breakdown][region majflt][swapout garbage]
-        if (UseProfileRegionMajflt) {
-          if(os::adc_advise_alloc_range((uintptr_t)new_obj,
-            (uintptr_t)(new_obj + words_size))) {
-            log_info(gc)("[calculate_target_humongous_objects] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
-              p2i(new_obj), p2i(new_obj + words_size));
-            os:abort();
-          }
-        }
         continue;
       }
     }
@@ -869,6 +851,27 @@ public:
     if (p->is_forwarded()) {
       HeapWord* compact_from = cast_from_oop<HeapWord*>(p);
       HeapWord* compact_to = cast_from_oop<HeapWord*>(p->forwardee());
+
+      // [gc breakdown][region majflt][swapout garbage]
+      if (UseProfileRegionMajflt) {
+        // // DEBUG
+        // if(!_heap->heap_region_containing(p)->is_regular()) {
+        //   log_info(gc)("[ShenandoahCompactObjectsClosure] error state %d",
+        //     _heap->heap_region_containing(p)->state());
+        //   os::abort();
+        // }
+        // log_info(gc)("[ShenandoahCompactObjectsClosure] alloc region %lu, page [" PTR_FORMAT ", " PTR_FORMAT "]",
+        //   _heap->heap_region_index_containing(compact_to),
+        //   p2i(compact_to) >> 12, p2i(compact_to + size) >> 12);
+
+        // conjoint copy, can not init to zero
+        if(os::adc_advise_alloc_range((uintptr_t)compact_to,
+          (uintptr_t)(compact_to + size))) {
+          log_info(gc)("[ShenandoahCompactObjectsClosure] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+            p2i(compact_to), p2i(compact_to + size));
+          os::abort();
+        }
+      }
       Copy::aligned_conjoint_words(compact_from, compact_to, size);
       oop new_obj = cast_to_oop(compact_to);
 
@@ -984,6 +987,27 @@ void ShenandoahFullGC::compact_humongous_objects() {
       assert(old_start != new_start, "must be real move");
       assert(r->is_stw_move_allowed(), "Region " SIZE_FORMAT " should be movable", r->index());
 
+      // [gc breakdown][region majflt][swapout garbage]
+      if (UseProfileRegionMajflt) {
+        // if(!r->is_regular()) {
+        //   log_info(gc)("[ShenandoahCompactObjectsClosure] error state %d",
+        //     r->state());
+        //   os::abort();
+        // }
+        // log_info(gc)("[compact_humongous_objects] alloc region %lu, page [" PTR_FORMAT ", " PTR_FORMAT "]",
+        //   new_start,
+        //   p2i(heap->get_region(new_start)->bottom()) >> 12,
+        //   p2i(heap->get_region(new_start)->bottom() + words_size) >> 12);
+
+        // conjoint copy, can not init to zero
+        if(os::adc_advise_alloc_range((uintptr_t)heap->get_region(new_start)->bottom(),
+          (uintptr_t)(heap->get_region(new_start)->bottom() + words_size))) {
+          log_info(gc)("[compact_humongous_objects] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",
+            p2i(heap->get_region(new_start)->bottom()),
+            p2i(heap->get_region(new_start)->bottom() + words_size));
+          os::abort();
+        }
+      }
       Copy::aligned_conjoint_words(r->bottom(), heap->get_region(new_start)->bottom(), words_size);
       ContinuationGCSupport::relativize_stack_chunk(cast_to_oop<HeapWord*>(r->bottom()));
 

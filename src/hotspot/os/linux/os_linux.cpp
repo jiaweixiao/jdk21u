@@ -1660,6 +1660,8 @@ int os::adc_advise_alloc_range(uintptr_t start, uintptr_t end) {
 
 int os::adc_advise_free_range(uintptr_t start, uintptr_t end) {
   uint mode = 2;
+  // Debug
+  // memset((void*)start, 0, (size_t)(end - start));
   return syscall(454, mode, start, end);
 }
 

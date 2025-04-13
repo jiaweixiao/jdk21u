@@ -307,6 +307,8 @@ HeapWord* ShenandoahFreeSet::allocate_contiguous(ShenandoahAllocRequest& req) {
 
     // [gc breakdown][region majflt][swapout garbage]
     if (UseProfileRegionMajflt) {
+      // // DEBUG
+      // Copy::zero_to_words(r->bottom(), used_words);
       if(os::adc_advise_alloc_range((uintptr_t)r->bottom(),
               (uintptr_t)(r->bottom() + used_words))) {
         log_info(gc)("[allocate_contiguous] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]",

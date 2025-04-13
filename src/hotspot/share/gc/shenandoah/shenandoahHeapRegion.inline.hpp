@@ -48,6 +48,8 @@ HeapWord* ShenandoahHeapRegion::allocate(size_t size, ShenandoahAllocRequest::Ty
 
     // [gc breakdown][region majflt][swapout garbage]
     if (UseProfileRegionMajflt) {
+      // // DEBUG
+      // Copy::zero_to_words(obj, size);
       if(os::adc_advise_alloc_range((uintptr_t)obj, (uintptr_t)new_top)) {
         log_info(gc)("[allocate] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(obj), p2i(new_top));
         os::abort();
