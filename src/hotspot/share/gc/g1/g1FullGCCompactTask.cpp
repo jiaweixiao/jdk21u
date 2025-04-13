@@ -59,6 +59,16 @@ void G1FullGCCompactTask::copy_object_to_new_location(oop obj) {
   // Copy object and reinit its mark.
   HeapWord* obj_addr = cast_from_oop<HeapWord*>(obj);
   HeapWord* destination = cast_from_oop<HeapWord*>(obj->forwardee());
+
+  // [gc breakdown][region majflt][swapout garbage]
+  // Remove a free range.
+  if (UseProfileRegionMajflt) {
+    if(os::adc_advise_alloc_range((uintptr_t)destination, 
+            (uintptr_t)(destination + size))) {
+      log_info(gc)("[G1 full copy obj] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(destination), p2i(destination + size));
+      os::abort();
+    }
+  }
   Copy::aligned_conjoint_words(obj_addr, destination, size);
 
   // There is no need to transform stack chunks - marking already did that.

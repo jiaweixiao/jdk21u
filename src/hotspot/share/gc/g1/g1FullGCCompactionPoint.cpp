@@ -100,14 +100,6 @@ void G1FullGCCompactionPoint::forward(oop object, size_t size) {
     switch_region();
   }
 
-  // [gc breakdown][region majflt][swapout garbage]
-  // Remove a free region.
-  if (UseProfileRegionMajflt) {
-    // os::region_majflt_add_region(_current_region->hrm_index());
-    os::adc_advise_alloc_range((uintptr_t)_compaction_top, 
-            (uintptr_t)(_compaction_top + size));
-  }
-
   // Store a forwarding pointer if the object should be moved.
   if (cast_from_oop<HeapWord*>(object) != _compaction_top) {
     object->forward_to(cast_to_oop(_compaction_top));

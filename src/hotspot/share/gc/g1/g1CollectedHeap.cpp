@@ -292,8 +292,10 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(HeapRegion* first_hr,
   for (uint i = first; i <= last; ++i) {
     HeapRegion *hr = region_at(i);
     if (UseProfileRegionMajflt) {
-      // os::region_majflt_add_region(i);
-      os::adc_advise_alloc_range((uintptr_t)hr->bottom(), (uintptr_t)hr->end());
+      if(os::adc_advise_alloc_range((uintptr_t)hr->bottom(), (uintptr_t)hr->end())) {
+        log_info(gc)("[hum obj init] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(hr->bottom()), p2i(hr->end()));
+        os::abort();
+      }
     }
   }
 
@@ -1457,11 +1459,13 @@ jint G1CollectedHeap::initialize() {
   // Init majflt region bitmap
   if (UseProfileRegionMajflt) {
     // assert((uintptr_t)_hrm.reserved().start() == (uintptr_t)heap_rs.base(), "Wrong heap base addr")
-    // os::adc_advise_init_bitmap((uintptr_t)_hrm.reserved().start(),
-    //         _hrm.max_length(), HeapRegion::GrainBytes);
     // adc advise region size is equal to 4KB page.
-    os::adc_advise_init_bitmap((uintptr_t)heap_rs.base(),
-            heap_rs.size() >> 12 , 4096);
+    ;
+    if(os::adc_advise_init_bitmap((uintptr_t)heap_rs.base(),
+            heap_rs.size() >> 12 , 4096)) {
+      log_info(gc)("[init] fails adc_advise_init_bitmap [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(heap_rs.base()), p2i(heap_rs.end()));
+      os::abort();
+    }
   }
   log_info(gc, init)("Heap Word Size %d", HeapWordSize);
   log_info(gc, init)("base " PTR_FORMAT ", region_number %u",
@@ -1546,8 +1550,11 @@ jint G1CollectedHeap::initialize() {
   // BOT updates. So we'll tag the dummy region as eden to avoid that.
   dummy_region->set_eden();
   if (UseProfileRegionMajflt) {
-    os::adc_advise_alloc_range((uintptr_t)dummy_region->bottom(),
-            (uintptr_t)dummy_region->end());
+    if(os::adc_advise_alloc_range((uintptr_t)dummy_region->bottom(),
+            (uintptr_t)dummy_region->end())) {
+      log_info(gc)("[dummy region] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(dummy_region->bottom()), p2i(dummy_region->end()));
+      os::abort();
+    }
   }
   // Make sure it's full.
   dummy_region->set_top(dummy_region->end());

@@ -159,7 +159,10 @@ double HeapRegion::set_free() {
   // [gc breakdown][region majflt][swapout garbage]
   // Add a free region.
   if (UseProfileRegionMajflt) {
-    os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end);
+    if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+      log_info(gc)("[set free] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
+      os::abort();
+    }
   }
 
   if (UseMadvFree) {
@@ -192,7 +195,7 @@ double HeapRegion::set_free() {
 void HeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
 
-  // TODO: alloc range
+  // // DEBUG
   // // [gc breakdown][region majflt][swapout garbage]
   // // Remove a free region.
   // if (UseProfileRegionMajflt && _type.is_free()) {
@@ -206,7 +209,7 @@ void HeapRegion::set_eden() {
 void HeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
 
-  // // TODO: skip?
+  // // DEBUG
   // // [gc breakdown][region majflt][swapout garbage]
   // // Convert survivor to eden
   // if (UseProfileRegionMajflt && _type.is_free()) {
@@ -220,7 +223,7 @@ void HeapRegion::set_eden_pre_gc() {
 void HeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
 
-  // // TODO: alloc range
+  // // DEBUG
   // // [gc breakdown][region majflt][swapout garbage]
   // // Remove a free region.
   // if (UseProfileRegionMajflt && _type.is_free()) {
@@ -236,7 +239,7 @@ void HeapRegion::move_to_old() {
   bool pre_is_free = _type.is_free();
 
   if (_type.relabel_as_old()) {
-    // TODO: skip?
+    // // DEBUG
     // // Change from [free, eden, survivor] to old region.
     // // Remove a free region.
     // if (UseProfileRegionMajflt && pre_is_free) {
@@ -251,7 +254,7 @@ void HeapRegion::move_to_old() {
 void HeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
 
-  // // TODO: alloc range
+  // // DEBUG
   // // [gc breakdown][region majflt][swapout garbage]
   // // Remove a free region.
   // if (UseProfileRegionMajflt && _type.is_free()) {
@@ -272,8 +275,10 @@ void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
   // [gc breakdown][region majflt][swapout garbage]
   // Remove a free region
   if (UseProfileRegionMajflt && _type.is_free()) {
-    // os::region_majflt_add_region(_hrm_index);
-    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+    if(os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+      log_info(gc)("[set start hum] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
+      os::abort();
+    }
   }
 
   _type.set_starts_humongous();
@@ -293,8 +298,10 @@ void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
   // [gc breakdown][region majflt][swapout garbage]
   // Remove a free region.
   if (UseProfileRegionMajflt && _type.is_free()) {
-    // os::region_majflt_add_region(_hrm_index);
-    os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end);
+    if(os::adc_advise_alloc_range((uintptr_t)_bottom, (uintptr_t)_end)) {
+      log_info(gc)("[set conti hum] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
+      os::abort();
+    }
   }
 
   _type.set_continues_humongous();
