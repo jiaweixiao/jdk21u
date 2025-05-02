@@ -78,10 +78,7 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
     const size_t ProcessingYieldLimitInWords = G1RebuildRemSetChunkSize / HeapWordSize;
 
     // [madv free]
-    // Find dead page in region.
-    // First merge consecutive pages and record their length.
-    // Each element is the number of range with given length.
-    
+    // Find dead page in region.    
     // bins: 2^0, ..., 2^log2i(4KB pages per region)
     uint* _dead_ranges_log2;
     uint _dead_ranges_len;
@@ -206,11 +203,10 @@ class G1RebuildRSAndScrubTask : public WorkerTask {
       return false;
     }
 
+    // [madv free]
+    // Find dead page in region.
+    // Here each worker claims one of the old generation regions.
     bool scan_and_scrub_to_pb_profiling(HeapRegion* hr, HeapWord* start, HeapWord* const limit) {
-      // [madv free]
-      // Find dead page in region.
-      // Here each worker claims one of the old generation regions.
-
       // Ceiling of number of pages.
       uint num_pages = (((uintptr_t)limit) - ((uintptr_t)start) + 4096 - 1) >> 12;
       // Ceiling of length of bitmap array.

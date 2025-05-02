@@ -154,20 +154,25 @@ double HeapRegion::calc_gc_efficiency() {
 
 double HeapRegion::set_free() {
   size_t ts = 0, ts_exit_sys = 0, tmp;
+  int count = 0;
   report_region_type_change(G1HeapRegionTraceType::Free);
 
   // [gc breakdown][region majflt][swapout garbage]
   // Add a free region.
   if (UseProfileRegionMajflt) {
+    ts = os::rdtsc();
     if(os::adc_advise_free_range((uintptr_t)_bottom, (uintptr_t)_end)) {
       log_info(gc)("[set free] fails adc_advise_alloc_range [" PTR_FORMAT ", " PTR_FORMAT "]", p2i(_bottom), p2i(_end));
       os::abort();
     }
+    ts = os::rdtsc() - ts;
+    count = 1;
   }
 
   if (UseMadvFree) {
     ts = os::free_page_frames(true, (char*)_bottom, HeapRegion::GrainBytes, &tmp);
     ts_exit_sys = tmp;
+    count = 1;
   } else if (UseMadvFreePage > 0) {
     uint step = 4096 * UseMadvFreePage;
     char* addr = (char*)_bottom;
@@ -176,14 +181,17 @@ double HeapRegion::set_free() {
       ts += os::free_page_frames(true, (char*)addr, step, &tmp);
       ts_exit_sys += tmp;
       addr += step;
+      count += 1;
     }
-  } else if (UseMadvDontneed)
+  } else if (UseMadvDontneed) {
     ts = os::free_page_frames(false, (char*)_bottom, HeapRegion::GrainBytes, NULL);
+    count = 1;
+  }
 
   _type.set_free();
 
-  if (ts > 0) {
-    Atomic::add(&_madv_count, (size_t)1, memory_order_relaxed);
+  if (count > 0) {
+    Atomic::add(&_madv_count, (size_t)count, memory_order_relaxed);
     Atomic::add(&_madv_cycles, ts, memory_order_relaxed);
     Atomic::add(&_madv_exit_cycles, ts_exit_sys, memory_order_relaxed);
   }
