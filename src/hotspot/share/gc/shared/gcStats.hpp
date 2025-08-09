@@ -41,7 +41,10 @@ class GCStats : public CHeapObj<mtGC> {
 
 // Class used to profile and save gc majflt stats
 class GCMajfltStats {
-  size_t _stt_majflt;
+  long _stt_majflt;
+  long _stt_minflt;
+  long _stt_user_ms;
+  long _stt_sys_ms;
 
 public:
   GCMajfltStats();
