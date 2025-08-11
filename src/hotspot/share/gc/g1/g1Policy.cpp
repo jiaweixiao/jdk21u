@@ -317,7 +317,7 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
           //small eden with fast alloc, incre eden
           desired_eden_count += SMALL_EDEN_STEP;
           log_info(gc, ergo)("[DEBUG] incre eden for one step(fast alloc or small eden), new eden = %ld", desired_eden_count);
-        }else if(gc_sys_time_base > 2*_gc_user_time){
+        }else if(gc_sys_time_base > _gc_user_time){
 		  //}else if(mut_sys_time_base > _mut_user_time || gc_sys_time_base > _gc_user_time){
           //decre eden for large WSS
           double mut_decre = mut_sys_time_base > _mut_user_time ? eden_decre_factor(_mut_sys_time,_mut_user_time) : 0;
