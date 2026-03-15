@@ -228,11 +228,13 @@ void G1BarrierSetC2::pre_barrier(GraphKit* kit,
   const int marking_offset = in_bytes(G1ThreadLocalData::satb_mark_queue_active_offset());
   const int index_offset   = in_bytes(G1ThreadLocalData::satb_mark_queue_index_offset());
   const int buffer_offset  = in_bytes(G1ThreadLocalData::satb_mark_queue_buffer_offset());
+  const int satb_mark_active_offset = in_bytes(G1ThreadLocalData::satb_mark_active_offset());
 
   // Now the actual pointers into the thread
   Node* marking_adr = __ AddP(no_base, tls, __ ConX(marking_offset));
   Node* buffer_adr  = __ AddP(no_base, tls, __ ConX(buffer_offset));
   Node* index_adr   = __ AddP(no_base, tls, __ ConX(index_offset));
+  Node* satb_mark_active_adr = __ AddP(no_base, tls, __ ConX(satb_mark_active_offset));
 
   // Now some of the values
   Node* marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
@@ -270,6 +272,11 @@ void G1BarrierSetC2::pre_barrier(GraphKit* kit,
         const TypeFunc *tf = write_ref_field_pre_entry_Type();
         __ make_leaf_call(tf, CAST_FROM_FN_PTR(address, G1BarrierSetRuntime::write_ref_field_pre_entry), "write_ref_field_pre_entry", pre_val, tls);
       } __ end_if();  // (!index)
+
+      // TODO
+      Node* satb_mark_active_value = __ load(__ ctrl(), satb_mark_active_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+      Node* next_satb_mark_active_value = kit->gvn().transform(new AddXNode(satb_mark_active_value, __ ConX(1)));
+      __ store(__ ctrl(), satb_mark_active_adr, next_satb_mark_active_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
     } __ end_if();  // (pre_val != nullptr)
   } __ end_if();  // (!marking)
 
@@ -426,6 +433,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   const int buffer_offset = in_bytes(G1ThreadLocalData::dirty_card_queue_buffer_offset());
 
   const int old_to_any_offset = in_bytes(G1ThreadLocalData::old_to_any_offset());
+  const int old_to_clean_card_offset = in_bytes(G1ThreadLocalData::old_to_clean_card_offset());
   const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
   const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
 
@@ -434,6 +442,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   Node* buffer_adr = __ AddP(no_base, tls, __ ConX(buffer_offset));
   Node* index_adr =  __ AddP(no_base, tls, __ ConX(index_offset));
   Node* old_to_any_adr = __ AddP(no_base, tls, __ ConX(old_to_any_offset));
+  Node* old_to_clean_card_adr = __ AddP(no_base, tls, __ ConX(old_to_clean_card_offset));
   Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
   Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
 
@@ -482,6 +491,9 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
           Node* card_val_reload = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
           __ if_then(card_val_reload, BoolTest::ne, dirty_card); {
             g1_mark_card(kit, ideal, card_adr, oop_store, alias_idx, index, index_adr, buffer, tf);
+            Node* old_to_clean_card_value = __ load(__ ctrl(), old_to_clean_card_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+            Node* next_old_to_clean_card_value = kit->gvn().transform(new AddXNode(old_to_clean_card_value, __ ConX(1)));
+            __ store(__ ctrl(), old_to_clean_card_adr, next_old_to_clean_card_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
           } __ end_if();
           Node* old_to_any_value = __ load(__ ctrl(), old_to_any_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
           Node* next_old_to_any_value = kit->gvn().transform(new AddXNode(old_to_any_value, __ ConX(1)));

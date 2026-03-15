@@ -166,8 +166,10 @@ void G1BarrierSet::on_thread_detach(Thread* thread) {
   // Atomic::add(g1h->_young_to_upper, data->young_to_upper);
   // Atomic::add(g1h->_young_to_lower, data->young_to_lower);
 
-  log_info(gc)("old_to_any %lu, young_to_upper %lu, young_to_lower %lu",
+  log_info(gc)("satb_mark_active %lu, old_to_any %lu, old_to_clean_card %lu, young_to_upper %lu, young_to_lower %lu",
+               data->satb_mark_active,
                data->old_to_any,
+               data->old_to_clean_card,
                data->young_to_upper,
                data->young_to_lower);
 

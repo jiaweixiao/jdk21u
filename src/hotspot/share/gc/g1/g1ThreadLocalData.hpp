@@ -37,7 +37,9 @@ private:
   SATBMarkQueue _satb_mark_queue;
   G1DirtyCardQueue _dirty_card_queue;
 public:
+  volatile size_t satb_mark_active;
   volatile size_t old_to_any;
+  volatile size_t old_to_clean_card;
   volatile size_t young_to_lower;
   volatile size_t young_to_upper;
 
@@ -46,7 +48,9 @@ private:
   G1ThreadLocalData() :
       _satb_mark_queue(&G1BarrierSet::satb_mark_queue_set()),
       _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()),
+      satb_mark_active(0),
       old_to_any(0),
+      old_to_clean_card(0),
       young_to_lower(0),
       young_to_upper(0) {}
 
@@ -103,8 +107,16 @@ public:
     return dirty_card_queue_offset() + G1DirtyCardQueue::byte_offset_of_buf();
   }
 
+  static ByteSize satb_mark_active_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, satb_mark_active);
+  }
+
   static ByteSize old_to_any_offset() {
     return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, old_to_any);
+  }
+
+  static ByteSize old_to_clean_card_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, old_to_clean_card);
   }
   
   static ByteSize young_to_lower_offset() {
