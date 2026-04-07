@@ -74,6 +74,14 @@ protected:
                     Node* buffer,
                     const TypeFunc* tf) const;
 
+  void g1_enqueue_card(GraphKit* kit,
+                       IdealKit& ideal,
+                       Node* card_adr,
+                       Node* index,
+                       Node* index_adr,
+                       Node* buffer,
+                       const TypeFunc* tf) const;
+
   // Helper for unsafe accesses, that may or may not be on the referent field.
   // Generates the guards that check whether the result of
   // Unsafe.getReference should be recorded in an SATB log buffer.

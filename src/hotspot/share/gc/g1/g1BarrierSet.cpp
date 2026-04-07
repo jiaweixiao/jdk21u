@@ -91,7 +91,7 @@ void G1BarrierSet::write_ref_array_pre(narrowOop* dst, size_t count, bool dest_u
 
 void G1BarrierSet::write_ref_field_post_slow(volatile CardValue* byte) {
   // In the slow path, we know a card is not young
-  assert(*byte != G1CardTable::g1_young_card_val(), "slow path invoked without filtering");
+  assert(!G1CardTable::is_young_card_val(*byte), "slow path invoked without filtering");
   OrderAccess::storeload();
   if (*byte != G1CardTable::dirty_card_val()) {
     *byte = G1CardTable::dirty_card_val();
@@ -109,7 +109,7 @@ void G1BarrierSet::invalidate(JavaThread* thread, MemRegion mr) {
   CardValue* last_byte = _card_table->byte_for(mr.last());
 
   // skip young gen cards
-  if (*byte == G1CardTable::g1_young_card_val()) {
+  if (G1CardTable::is_young_card_val(*byte)) {
     // MemRegion should not span multiple regions for the young gen.
     DEBUG_ONLY(HeapRegion* containing_hr = G1CollectedHeap::heap()->heap_region_containing(mr.start());)
     assert(containing_hr->is_young(), "it should be young");
@@ -124,7 +124,7 @@ void G1BarrierSet::invalidate(JavaThread* thread, MemRegion mr) {
   G1DirtyCardQueue& queue = G1ThreadLocalData::dirty_card_queue(thread);
   for (; byte <= last_byte; byte++) {
     CardValue bv = *byte;
-    assert(bv != G1CardTable::g1_young_card_val(), "Invalid card");
+    assert(!G1CardTable::is_young_card_val(bv), "Invalid card");
     if (bv != G1CardTable::dirty_card_val()) {
       *byte = G1CardTable::dirty_card_val();
       qset.enqueue(queue, byte);

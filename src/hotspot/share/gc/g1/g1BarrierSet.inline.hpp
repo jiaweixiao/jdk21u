@@ -83,7 +83,7 @@ inline void G1BarrierSet::write_ref_array_work(MemRegion mr) {
 template <DecoratorSet decorators, typename T>
 inline void G1BarrierSet::write_ref_field_post(T* field) {
   volatile CardValue* byte = _card_table->byte_for(field);
-  if (*byte != G1CardTable::g1_young_card_val()) {
+  if (!G1CardTable::is_young_card_val(*byte)) {
     // Take a slow path for cards in old
     write_ref_field_post_slow(byte);
   }

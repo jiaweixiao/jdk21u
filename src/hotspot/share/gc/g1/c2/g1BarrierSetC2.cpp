@@ -28,6 +28,7 @@
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1BarrierSetRuntime.hpp"
 #include "gc/g1/g1CardTable.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/g1/g1ThreadLocalData.hpp"
 #include "gc/g1/heapRegion.hpp"
 #include "opto/arraycopynode.hpp"
@@ -359,6 +360,18 @@ void G1BarrierSetC2::g1_mark_card(GraphKit* kit,
   // Smash zero into card. MUST BE ORDERED WRT TO STORE
   __ storeCM(__ ctrl(), card_adr, zero, oop_store, oop_alias_idx, card_bt, Compile::AliasIdxRaw);
 
+  g1_enqueue_card(kit, ideal, card_adr, index, index_adr, buffer, tf);
+}
+
+void G1BarrierSetC2::g1_enqueue_card(GraphKit* kit,
+                                     IdealKit& ideal,
+                                     Node* card_adr,
+                                     Node* index,
+                                     Node* index_adr,
+                                     Node* buffer,
+                                     const TypeFunc* tf) const {
+  Node* zeroX = __ ConX(0);
+  Node* no_base = __ top();
   //  Now do the queue work
   __ if_then(index, BoolTest::ne, zeroX); {
 
@@ -372,7 +385,6 @@ void G1BarrierSetC2::g1_mark_card(GraphKit* kit,
   } __ else_(); {
     __ make_leaf_call(tf, CAST_FROM_FN_PTR(address, G1BarrierSetRuntime::write_ref_field_post_entry), "write_ref_field_post_entry", card_adr, __ thread());
   } __ end_if();
-
 }
 
 void G1BarrierSetC2::post_barrier(GraphKit* kit,
@@ -423,8 +435,10 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   float likely = PROB_LIKELY_MAG(3);
   float unlikely = PROB_UNLIKELY_MAG(3);
   Node* young_card = __ ConI((jint)G1CardTable::g1_young_card_val());
+  Node* young_card_logged = __ ConI((jint)G1CardTable::g1_young_gen_logged_card_val());
   Node* dirty_card = __ ConI((jint)G1CardTable::dirty_card_val());
   Node* zeroX = __ ConX(0);
+  BasicType card_bt = T_BYTE;
 
   const TypeFunc *tf = write_ref_field_post_entry_Type();
 
@@ -434,8 +448,6 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
 
   const int old_to_any_offset = in_bytes(G1ThreadLocalData::old_to_any_offset());
   const int old_to_clean_card_offset = in_bytes(G1ThreadLocalData::old_to_clean_card_offset());
-  const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
-  const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
 
   // Pointers into the thread
 
@@ -443,8 +455,6 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
   Node* index_adr =  __ AddP(no_base, tls, __ ConX(index_offset));
   Node* old_to_any_adr = __ AddP(no_base, tls, __ ConX(old_to_any_offset));
   Node* old_to_clean_card_adr = __ AddP(no_base, tls, __ ConX(old_to_clean_card_offset));
-  Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
-  Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
 
   // Now some values
   // Use ctrl to avoid hoisting these values past a safepoint, which could
@@ -484,6 +494,7 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
         Node* card_val = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
 
         __ if_then(card_val, BoolTest::ne, young_card, unlikely); {
+          __ if_then(card_val, BoolTest::ne, young_card_logged, likely); {
           kit->sync_kit(ideal);
           kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
           __ sync_kit(kit);
@@ -498,16 +509,56 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
           Node* old_to_any_value = __ load(__ ctrl(), old_to_any_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
           Node* next_old_to_any_value = kit->gvn().transform(new AddXNode(old_to_any_value, __ ConX(1)));
           __ store(__ ctrl(), old_to_any_adr, next_old_to_any_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
-        } __ else_(); {
-          __ if_then(adr, BoolTest::lt, val, unlikely); {
-            Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-            Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
-            __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
-          } __ else_(); {
-            Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-            Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
-            __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
           } __ end_if();
+        } __ else_(); {
+          if (G1EnableYoungToYoungLowToHighRSet) {
+            const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
+            const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
+            Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
+            Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
+            auto maybe_log_young_card = [&]() {
+              __ if_then(adr, BoolTest::lt, val, unlikely); {
+                Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
+                __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+
+                Node* val_cast = __ CastPX(__ ctrl(), val);
+                Node* val_card_offset = __ URShiftX(val_cast, __ ConI(CardTable::card_shift()));
+                Node* val_card_adr = __ AddP(no_base, byte_map_base_node(kit), val_card_offset);
+                Node* val_card_val = __ load(__ ctrl(), val_card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
+
+                __ if_then(val_card_val, BoolTest::eq, young_card, likely); {
+                  kit->sync_kit(ideal);
+                  kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
+                  __ sync_kit(kit);
+
+                  Node* card_val_reload = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
+                  __ if_then(card_val_reload, BoolTest::eq, young_card); {
+                    __ storeCM(__ ctrl(), card_adr, young_card_logged, oop_store, alias_idx, card_bt, Compile::AliasIdxRaw);
+                    g1_enqueue_card(kit, ideal, card_adr, index, index_adr, buffer, tf);
+                  } __ end_if();
+                } __ else_(); {
+                  __ if_then(val_card_val, BoolTest::eq, young_card_logged, likely); {
+                    kit->sync_kit(ideal);
+                    kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
+                    __ sync_kit(kit);
+
+                    Node* card_val_reload = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
+                    __ if_then(card_val_reload, BoolTest::eq, young_card); {
+                      __ storeCM(__ ctrl(), card_adr, young_card_logged, oop_store, alias_idx, card_bt, Compile::AliasIdxRaw);
+                      g1_enqueue_card(kit, ideal, card_adr, index, index_adr, buffer, tf);
+                    } __ end_if();
+                  } __ end_if();
+                } __ end_if();
+              } __ else_(); {
+                Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
+                __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+              } __ end_if();
+            };
+
+            maybe_log_young_card();
+          }
         } __ end_if();
       } __ end_if();
     } __ end_if();

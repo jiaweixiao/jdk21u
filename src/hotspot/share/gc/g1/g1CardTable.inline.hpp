@@ -43,6 +43,15 @@ inline bool G1CardTable::mark_clean_as_dirty(CardValue* card) {
   return false;
 }
 
+inline bool G1CardTable::mark_young_card_as_logged(CardValue* card) {
+  CardValue value = *card;
+  if (value == g1_young_card_val()) {
+    *card = g1_young_gen_logged_card_val();
+    return true;
+  }
+  return false;
+}
+
 inline void G1CardTable::mark_range_dirty(size_t start_card_index, size_t num_cards) {
   assert(is_aligned(start_card_index, sizeof(size_t)), "Start card index must be aligned.");
   assert(is_aligned(num_cards, sizeof(size_t)), "Number of cards to change must be evenly divisible.");

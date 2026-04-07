@@ -129,6 +129,36 @@ public:
   // fence/synchronization.
   void refine_card_concurrently(CardValue* const card_ptr,
                                 const uint worker_id);
+  struct YoungCardScanStats {
+    size_t cards_scanned;
+    size_t cache_hits;
+    size_t restart_from_bottom;
+    size_t restart_from_cached_start;
+    size_t resume_from_cached_end;
+    size_t objects_walked_to_first_overlap;
+    size_t objects_scanned_in_card;
+    size_t parse_failures;
+
+    YoungCardScanStats() :
+      cards_scanned(0),
+      cache_hits(0),
+      restart_from_bottom(0),
+      restart_from_cached_start(0),
+      resume_from_cached_end(0),
+      objects_walked_to_first_overlap(0),
+      objects_scanned_in_card(0),
+      parse_failures(0) {}
+  };
+  // Pause-time dequeue support for young_logged cards when
+  // -XX:+UnlockExperimentalVMOptions -XX:+G1EnableYoungToYoungLowToHighRSet is enabled.
+  // last_obj_start/end form a per-worker, per-region cursor cache so a worker can
+  // process multiple cards in the same young region without restarting the object
+  // walk from bottom() every time.
+  void refine_young_card_during_gc(CardValue* card_ptr,
+                                   uint worker_id,
+                                   HeapWord** last_obj_start,
+                                   HeapWord** last_obj_end,
+                                   YoungCardScanStats* stats);
 
   // Print accumulated summary info from the start of the VM.
   void print_summary_info();

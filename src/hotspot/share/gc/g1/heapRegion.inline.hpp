@@ -605,18 +605,15 @@ HeapWord* HeapRegion::oops_on_memregion_seq_iterate_careful(MemRegion mr,
   if (is_humongous()) {
     return do_oops_on_memregion_in_humongous<Closure, in_gc_pause>(mr, cl);
   }
-  assert(is_old(), "Wrongly trying to iterate over region %u type %s", _hrm_index, get_type_str());
+  assert(is_old() || is_young(), "Wrongly trying to iterate over region %u type %s", _hrm_index, get_type_str());
 
-  // Because mr has been trimmed to what's been allocated in this
-  // region, the objects in these parts of the heap have non-null
-  // klass pointers. There's no need to use klass_or_null to detect
-  // in-progress allocation.
-  // We might be in the progress of scrubbing this region and in this
-  // case there might be objects that have their classes unloaded and
-  // therefore needs to be scanned using the bitmap.
+  // Old regions have a stable top and can use the faster iterator. Young regions
+  // may still be allocating, so keep the more defensive klass_or_null checks.
+  if (is_old()) {
+    return oops_on_memregion_iterate<Closure, in_gc_pause>(mr, cl);
+  }
 
-  return oops_on_memregion_iterate<Closure, in_gc_pause>(mr, cl);
-//  return oops_on_memregion_iterate_with_nullptr<Closure, in_gc_pause>(mr, cl);
+  return oops_on_memregion_iterate_with_nullptr<Closure, in_gc_pause>(mr, cl);
 }
 
 inline int HeapRegion::age_in_surv_rate_group() const {

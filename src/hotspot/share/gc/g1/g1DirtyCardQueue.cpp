@@ -30,6 +30,7 @@
 #include "gc/g1/g1ConcurrentRefineThread.hpp"
 #include "gc/g1/g1DirtyCardQueue.hpp"
 #include "gc/g1/g1FreeIdSet.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/g1/g1RedirtyCardsQueue.hpp"
 #include "gc/g1/g1RemSet.hpp"
 #include "gc/g1/g1ThreadLocalData.hpp"
@@ -422,7 +423,11 @@ class G1RefineBufferedCards : public StackObj {
 
   void redirty_unrefined_cards(size_t start) {
     for ( ; start < _node_buffer_size; ++start) {
-      *_node_buffer[start] = G1CardTable::dirty_card_val();
+      G1CollectedHeap* g1h = G1CollectedHeap::heap();
+      G1CardTable::CardValue* card_ptr = _node_buffer[start];
+      HeapRegion* hr = g1h->heap_region_containing(g1h->card_table()->addr_for(card_ptr));
+      *card_ptr = (G1EnableYoungToYoungLowToHighRSet && hr->is_young()) ?
+        G1CardTable::g1_young_gen_logged_card_val() : G1CardTable::dirty_card_val();
     }
   }
 

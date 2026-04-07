@@ -37,7 +37,14 @@ void G1CardTable::g1_mark_as_young(const MemRegion& mr) {
 
 #ifndef PRODUCT
 void G1CardTable::verify_g1_young_region(MemRegion mr) {
-  verify_region(mr, g1_young_gen,  true);
+  CardValue* current = byte_for(mr.start());
+  CardValue* end = byte_after(mr.last());
+  while (current < end) {
+    guarantee(is_young_card_val(*current),
+              "card " PTR_FORMAT " for young region " PTR_FORMAT " should be young-like but is %u",
+              p2i(current), p2i(addr_for(current)), *current);
+    current++;
+  }
 }
 #endif
 
@@ -70,5 +77,5 @@ void G1CardTable::initialize(G1RegionToSpaceMapper* mapper) {
 
 bool G1CardTable::is_in_young(const void* p) const {
   volatile CardValue* card = byte_for(p);
-  return *card == G1CardTable::g1_young_card_val();
+  return G1CardTable::is_young_card_val(*card);
 }

@@ -302,6 +302,17 @@
           "itself if there is work remaining.")                             \
           range(1, UINT_MAX)                                                \
                                                                             \
+  product(bool, G1EnableYoungToYoungLowToHighRSet, false, EXPERIMENTAL,     \
+          "Maintain remembered sets for selected directional "              \
+          "young-to-young cross-region references, only from lower "        \
+          "addresses to higher addresses. Disabled by default so G1 keeps " \
+          "the original old-to-young-only remembered-set behavior.")        \
+                                                                            \
+  product(bool, G1YoungToYoungLowToHighRSetPauseScan, false, EXPERIMENTAL,  \
+          "During young GC Merge Heap Roots, scan dequeued young_logged "   \
+          "cards to update young-to-young remsets. Disabled by default "    \
+          "because this path can significantly increase pause time.")        \
+                                                                            \
   product(double, G1RemSetFreeMemoryStepDurationMillis, 1, EXPERIMENTAL,    \
           "The amount of time that the free memory task should spend "      \
           "before a pause of G1RemSetFreeMemoryRescheduleDelayMillis "      \

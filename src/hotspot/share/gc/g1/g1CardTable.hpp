@@ -53,6 +53,10 @@ class G1CardTable : public CardTable {
 public:
   enum G1CardValues {
     g1_young_gen = CT_MR_BS_last_reserved << 1,
+    // A young card that has already been logged once for the custom young-to-young
+    // remembered-set maintenance. Keeping a dedicated state avoids re-enqueueing
+    // the same card while still distinguishing it from ordinary dirty old cards.
+    g1_young_gen_logged = g1_young_gen + 1,
 
     // During evacuation we use the card table to consolidate the cards we need to
     // scan for roots onto the card table from the various sources. Further it is
@@ -84,7 +88,14 @@ public:
   }
 
   static CardValue g1_young_card_val() { return g1_young_gen; }
+  static CardValue g1_young_gen_logged_card_val() { return g1_young_gen_logged; }
   static CardValue g1_scanned_card_val() { return g1_card_already_scanned; }
+  static bool is_young_card_val(CardValue value) {
+    return value == g1_young_card_val() || value == g1_young_gen_logged_card_val();
+  }
+  static bool is_logged_card_val(CardValue value) {
+    return value == dirty_card_val() || value == g1_young_gen_logged_card_val();
+  }
 
   void verify_g1_young_region(MemRegion mr) PRODUCT_RETURN;
   void g1_mark_as_young(const MemRegion& mr);
@@ -97,6 +108,10 @@ public:
   // Clean before this operation. This result may be inaccurate as it does not
   // perform the dirtying atomically.
   inline bool mark_clean_as_dirty(CardValue* card);
+
+  // Mark the given young card as logged for remembered set refinement.
+  // Returns whether the card was a plain young card before this operation.
+  inline bool mark_young_card_as_logged(CardValue* card);
 
   // Change Clean cards in a (large) area on the card table as Dirty, preserving
   // already scanned cards. Assumes that most cards in that area are Clean.

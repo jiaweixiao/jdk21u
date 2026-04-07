@@ -29,6 +29,7 @@
 
 #include "gc/g1/g1CardTable.hpp"
 #include "gc/g1/g1CollectedHeap.inline.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/g1/g1OopStarChunkedList.inline.hpp"
 #include "gc/g1/g1RemSet.hpp"
 #include "oops/access.inline.hpp"
@@ -121,13 +122,14 @@ template <class T> void G1ParScanThreadState::write_ref_field_post(T* p, oop obj
 
 template <class T> void G1ParScanThreadState::enqueue_card_if_tracked(G1HeapRegionAttr region_attr, T* p, oop o) {
   assert(!HeapRegion::is_in_same_region(p, o), "Should have filtered out cross-region references already.");
-  assert(!_g1h->heap_region_containing(p)->is_survivor(), "Should have filtered out from-newly allocated survivor references already.");
+  HeapRegion* const hr_from = _g1h->heap_region_containing(p);
+  assert(!hr_from->is_survivor(), "Should have filtered out from-newly allocated survivor references already.");
   // We relabel all regions that failed evacuation as old gen without remembered,
   // and so pre-filter them out in the caller.
-  assert(!_g1h->heap_region_containing(o)->in_collection_set(), "Should not try to enqueue reference into collection set region");
+  HeapRegion* const hr_obj = _g1h->heap_region_containing(o);
+  assert(!hr_obj->in_collection_set(), "Should not try to enqueue reference into collection set region");
 
 #ifdef ASSERT
-  HeapRegion* const hr_obj = _g1h->heap_region_containing(o);
   assert(region_attr.remset_is_tracked() == hr_obj->rem_set()->is_tracked(),
          "State flag indicating remset tracking disagrees (%s) with actual remembered set (%s) for region %u",
          BOOL_TO_STR(region_attr.remset_is_tracked()),
@@ -137,6 +139,17 @@ template <class T> void G1ParScanThreadState::enqueue_card_if_tracked(G1HeapRegi
   if (!region_attr.remset_is_tracked()) {
     return;
   }
+
+  if (G1EnableYoungToYoungLowToHighRSet && hr_from->is_young() && hr_obj->is_young()) {
+    // Young GC does not merge these references as heap roots. Instead we rebuild
+    // the live subset while evacuating objects: only surviving young->young,
+    // cross-region, low-address -> high-address references are inserted.
+    if (p2i(p) < p2i(o)) {
+      hr_obj->rem_set()->add_reference(p, _worker_id);
+    }
+    return;
+  }
+
   size_t card_index = ct()->index_for(p);
   // If the card hasn't been added to the buffer, do it.
   if (_last_enqueued_card != card_index) {

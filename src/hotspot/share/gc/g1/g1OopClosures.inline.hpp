@@ -29,6 +29,7 @@
 
 #include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1ConcurrentMark.inline.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/g1/g1ParScanThreadState.inline.hpp"
 #include "gc/g1/g1RemSet.hpp"
 #include "gc/g1/heapRegion.inline.hpp"
@@ -146,7 +147,20 @@ inline void G1ConcurrentRefineOopClosure::do_oop_work(T* p) {
     return;
   }
 
-  HeapRegionRemSet* to_rem_set = _g1h->heap_region_containing(obj)->rem_set();
+  HeapRegion* from_hr = _g1h->heap_region_containing(p);
+  HeapRegion* to_hr = _g1h->heap_region_containing(obj);
+
+  if (from_hr->is_young()) {
+    if (!G1EnableYoungToYoungLowToHighRSet) {
+      return;
+    }
+    // Young-source cards are only logged to retain lower-address cross-young references.
+    if (!to_hr->is_young() || p2i(p) >= p2i(obj)) {
+      return;
+    }
+  }
+
+  HeapRegionRemSet* to_rem_set = to_hr->rem_set();
 
   assert(to_rem_set != nullptr, "Need per-region 'into' remsets.");
   if (to_rem_set->is_tracked()) {
