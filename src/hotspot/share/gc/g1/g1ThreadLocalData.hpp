@@ -26,6 +26,7 @@
 
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1DirtyCardQueue.hpp"
+#include "gc/shared/gcThreadLocalData.hpp"
 #include "gc/shared/gc_globals.hpp"
 #include "gc/shared/satbMarkQueue.hpp"
 #include "runtime/javaThread.hpp"
@@ -37,22 +38,28 @@ private:
   SATBMarkQueue _satb_mark_queue;
   G1DirtyCardQueue _dirty_card_queue;
 public:
-  volatile size_t satb_mark_active;
   volatile size_t old_to_any;
   volatile size_t old_to_clean_card;
   volatile size_t young_to_lower;
   volatile size_t young_to_upper;
+  volatile size_t young_to_upper_logged;
+  volatile size_t runtime_young_to_lower;
+  volatile size_t runtime_young_to_upper;
+  volatile size_t runtime_young_to_upper_logged;
 
 private:
 
   G1ThreadLocalData() :
       _satb_mark_queue(&G1BarrierSet::satb_mark_queue_set()),
       _dirty_card_queue(&G1BarrierSet::dirty_card_queue_set()),
-      satb_mark_active(0),
       old_to_any(0),
       old_to_clean_card(0),
       young_to_lower(0),
-      young_to_upper(0) {}
+      young_to_upper(0),
+      young_to_upper_logged(0),
+      runtime_young_to_lower(0),
+      runtime_young_to_upper(0),
+      runtime_young_to_upper_logged(0) {}
 
 public:
   static G1ThreadLocalData* data(Thread* thread) {
@@ -107,10 +114,6 @@ public:
     return dirty_card_queue_offset() + G1DirtyCardQueue::byte_offset_of_buf();
   }
 
-  static ByteSize satb_mark_active_offset() {
-    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, satb_mark_active);
-  }
-
   static ByteSize old_to_any_offset() {
     return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, old_to_any);
   }
@@ -126,6 +129,24 @@ public:
   static ByteSize young_to_upper_offset() {
     return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper);
   }
+
+  static ByteSize young_to_upper_logged_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, young_to_upper_logged);
+  }
+
+  static ByteSize runtime_young_to_lower_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, runtime_young_to_lower);
+  }
+
+  static ByteSize runtime_young_to_upper_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, runtime_young_to_upper);
+  }
+
+  static ByteSize runtime_young_to_upper_logged_offset() {
+    return Thread::gc_data_offset() + byte_offset_of(G1ThreadLocalData, runtime_young_to_upper_logged);
+  }
 };
+
+STATIC_ASSERT(sizeof(G1ThreadLocalData) <= sizeof(GCThreadLocalData));
 
 #endif // SHARE_GC_G1_G1THREADLOCALDATA_HPP

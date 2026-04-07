@@ -25,6 +25,7 @@
 #ifndef SHARE_GC_EPSILON_EPSILONTHREADLOCALDATA_HPP
 #define SHARE_GC_EPSILON_EPSILONTHREADLOCALDATA_HPP
 
+#include "gc/shared/gcThreadLocalData.hpp"
 #include "gc/shared/gc_globals.hpp"
 #include "runtime/javaThread.hpp"
 #include "utilities/debug.hpp"
@@ -68,5 +69,7 @@ public:
     data(thread)->_last_tlab_time = time;
   }
 };
+
+STATIC_ASSERT(sizeof(EpsilonThreadLocalData) <= sizeof(GCThreadLocalData));
 
 #endif // SHARE_GC_EPSILON_EPSILONTHREADLOCALDATA_HPP

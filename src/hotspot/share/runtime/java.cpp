@@ -33,6 +33,7 @@
 #include "code/codeCache.hpp"
 #include "compiler/compileBroker.hpp"
 #include "compiler/compilerOracle.hpp"
+#include "gc/g1/g1BarrierSet.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/stringdedup/stringDedup.hpp"
 #include "interpreter/bytecodeHistogram.hpp"
@@ -490,6 +491,10 @@ void before_exit(JavaThread* thread, bool halt) {
   log_info(gc)("Majflt(exit jvm)=%ld", majflt);
   log_info(gc)("Minflt(exit jvm)=%ld", minflt);
   os::dump_accum_thread_majflt_minflt_and_cputime("Exit jvm");
+
+  if (UseG1GC) {
+    G1BarrierSet::print_barrier_profile_summary(thread);
+  }
 
   // Print GC/heap related information.
   Log(gc, heap, exit) log;

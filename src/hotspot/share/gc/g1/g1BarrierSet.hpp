@@ -86,6 +86,8 @@ class G1BarrierSet: public CardTableBarrierSet {
   virtual void on_thread_attach(Thread* thread);
   virtual void on_thread_detach(Thread* thread);
 
+  static void print_barrier_profile_summary(Thread* current_thread = nullptr);
+
   static G1SATBMarkQueueSet& satb_mark_queue_set() {
     return g1_barrier_set()->_satb_mark_queue_set;
   }

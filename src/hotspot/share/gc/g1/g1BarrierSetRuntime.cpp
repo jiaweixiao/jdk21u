@@ -96,30 +96,50 @@ JRT_LEAF(void, G1BarrierSetRuntime::write_ref_field_post_slow_entry(HeapWord* fi
   G1CardTable* ct = g1h->card_table();
   G1CardTable::CardValue* card_addr = ct->byte_for(field_addr);
   G1DirtyCardQueue& queue = G1ThreadLocalData::dirty_card_queue(thread);
+  G1ThreadLocalData* data = G1ThreadLocalData::data(thread);
 
   OrderAccess::storeload();
 
   G1CardTable::CardValue card_value = *card_addr;
   // When the experimental young-to-young remset extension is disabled, keep the
   // original G1 slow-path behavior and only ever enqueue old dirty cards.
-  if (G1EnableYoungToYoungLowToHighRSet && G1CardTable::is_young_card_val(card_value)) {
-    if (card_value != G1CardTable::g1_young_card_val()) {
-      return;
-    }
-
+  if (G1EnableYoungToYoungLowToHighRSet &&
+      !G1YoungToYoungLowToHighRSetC2Only &&
+      G1CardTable::is_young_card_val(card_value)) {
     oop new_val = load_post_barrier_target(field_addr);
     if (new_val == nullptr) {
       return;
     }
 
-    // For the young-to-young extension the runtime path only decides whether the
-    // source card should be logged once. The final "is the target still young?"
-    // decision is intentionally deferred to refinement / evacuation-time rebuild:
-    // this avoids depending on transient register encodings here and keeps the
-    // slow path cheap.
-    if (!HeapRegion::is_in_same_region(field_addr, new_val) && p2i(field_addr) < p2i(new_val)) {
-      if (ct->mark_young_card_as_logged(card_addr)) {
-        G1BarrierSet::dirty_card_queue_set().enqueue(queue, card_addr);
+    if (!HeapRegion::is_in_same_region(field_addr, new_val)) {
+      // The runtime slow path reloads the just-stored oop from memory, while
+      // some callers still reach this helper before the field is guaranteed to
+      // contain a stable in-heap target. Guard the card-table lookup so the
+      // profiling-only target-young check does not crash on such transient
+      // values. C2 keeps using the explicit `val` node and is unaffected.
+      if (!g1h->is_in_reserved(new_val)) {
+        return;
+      }
+
+      G1CardTable::CardValue* val_card_addr = ct->byte_for(cast_from_oop<HeapWord>(new_val));
+      G1CardTable::CardValue val_card_value = *val_card_addr;
+
+      // Keep the runtime counters on the same footing as the C2 counters:
+      // only count cross-region writes whose target is still young-like.
+      if (G1CardTable::is_young_card_val(val_card_value)) {
+        if (p2i(field_addr) < p2i(new_val)) {
+          data->runtime_young_to_upper++;
+          // Count every low->high young-to-young candidate, but only record
+          // a logged event when this source card is still plain young and can
+          // transition to young_logged for the first time.
+          if (card_value == G1CardTable::g1_young_card_val() &&
+              ct->mark_young_card_as_logged(card_addr)) {
+            data->runtime_young_to_upper_logged++;
+            G1BarrierSet::dirty_card_queue_set().enqueue(queue, card_addr);
+          }
+        } else {
+          data->runtime_young_to_lower++;
+        }
       }
     }
     return;

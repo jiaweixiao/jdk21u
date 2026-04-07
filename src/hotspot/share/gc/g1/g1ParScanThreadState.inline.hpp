@@ -140,7 +140,10 @@ template <class T> void G1ParScanThreadState::enqueue_card_if_tracked(G1HeapRegi
     return;
   }
 
-  if (G1EnableYoungToYoungLowToHighRSet && hr_from->is_young() && hr_obj->is_young()) {
+  if (G1EnableYoungToYoungLowToHighRSet &&
+      !G1YoungToYoungLowToHighRSetEnqueueOnly &&
+      !G1YoungToYoungLowToHighRSetC2Only &&
+      hr_from->is_young() && hr_obj->is_young()) {
     // Young GC does not merge these references as heap roots. Instead we rebuild
     // the live subset while evacuating objects: only surviving young->young,
     // cross-region, low-address -> high-address references are inserted.

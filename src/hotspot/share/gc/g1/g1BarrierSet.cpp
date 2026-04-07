@@ -38,6 +38,7 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
+#include "runtime/atomic.hpp"
 #include "utilities/macros.hpp"
 #ifdef COMPILER1
 #include "gc/g1/c1/g1BarrierSetC1.hpp"
@@ -49,12 +50,32 @@
 class G1BarrierSetC1;
 class G1BarrierSetC2;
 
+static volatile size_t g1_profile_old_to_any = 0;
+static volatile size_t g1_profile_old_to_clean_card = 0;
+static volatile size_t g1_profile_c2_young_to_lower = 0;
+static volatile size_t g1_profile_c2_young_to_upper = 0;
+static volatile size_t g1_profile_c2_young_to_upper_logged = 0;
+static volatile size_t g1_profile_runtime_young_to_lower = 0;
+static volatile size_t g1_profile_runtime_young_to_upper = 0;
+static volatile size_t g1_profile_runtime_young_to_upper_logged = 0;
+
+static void accumulate_g1_barrier_profile(const G1ThreadLocalData* data) {
+  Atomic::add(&g1_profile_old_to_any, data->old_to_any);
+  Atomic::add(&g1_profile_old_to_clean_card, data->old_to_clean_card);
+  Atomic::add(&g1_profile_c2_young_to_lower, data->young_to_lower);
+  Atomic::add(&g1_profile_c2_young_to_upper, data->young_to_upper);
+  Atomic::add(&g1_profile_c2_young_to_upper_logged, data->young_to_upper_logged);
+  Atomic::add(&g1_profile_runtime_young_to_lower, data->runtime_young_to_lower);
+  Atomic::add(&g1_profile_runtime_young_to_upper, data->runtime_young_to_upper);
+  Atomic::add(&g1_profile_runtime_young_to_upper_logged, data->runtime_young_to_upper_logged);
+}
+
 G1BarrierSet::G1BarrierSet(G1CardTable* card_table) :
   CardTableBarrierSet(make_barrier_set_assembler<G1BarrierSetAssembler>(),
                       make_barrier_set_c1<G1BarrierSetC1>(),
                       make_barrier_set_c2<G1BarrierSetC2>(),
                       card_table,
-                      BarrierSet::FakeRtti(BarrierSet::G1BarrierSet)),
+  BarrierSet::FakeRtti(BarrierSet::G1BarrierSet)),
   _satb_mark_queue_buffer_allocator("SATB Buffer Allocator", G1SATBBufferSize),
   _dirty_card_queue_buffer_allocator("DC Buffer Allocator", G1UpdateBufferSize),
   _satb_mark_queue_set(&_satb_mark_queue_buffer_allocator),
@@ -162,16 +183,16 @@ void G1BarrierSet::on_thread_detach(Thread* thread) {
   // Flush any deferred card marks.
   G1CollectedHeap* g1h = G1CollectedHeap::heap();
   G1ThreadLocalData* data = G1ThreadLocalData::data(thread);
-  // Atomic::add(g1h->_old_to_any, data->old_to_any);
-  // Atomic::add(g1h->_young_to_upper, data->young_to_upper);
-  // Atomic::add(g1h->_young_to_lower, data->young_to_lower);
-
-  log_info(gc)("satb_mark_active %lu, old_to_any %lu, old_to_clean_card %lu, young_to_upper %lu, young_to_lower %lu",
-               data->satb_mark_active,
+  log_info(gc)("old_to_any %lu, old_to_clean_card %lu, young_to_upper %lu, young_to_upper_logged %lu, young_to_lower %lu, runtime_young_to_upper %lu, runtime_young_to_upper_logged %lu, runtime_young_to_lower %lu",
                data->old_to_any,
                data->old_to_clean_card,
                data->young_to_upper,
-               data->young_to_lower);
+               data->young_to_upper_logged,
+               data->young_to_lower,
+               data->runtime_young_to_upper,
+               data->runtime_young_to_upper_logged,
+               data->runtime_young_to_lower);
+  accumulate_g1_barrier_profile(data);
 
   CardTableBarrierSet::on_thread_detach(thread);
   {
@@ -184,4 +205,55 @@ void G1BarrierSet::on_thread_detach(Thread* thread) {
     qset.flush_queue(queue);
     qset.record_detached_refinement_stats(queue.refinement_stats());
   }
+}
+
+void G1BarrierSet::print_barrier_profile_summary(Thread* current_thread) {
+  size_t old_to_any = Atomic::load(&g1_profile_old_to_any);
+  size_t old_to_clean_card = Atomic::load(&g1_profile_old_to_clean_card);
+  size_t c2_young_to_lower = Atomic::load(&g1_profile_c2_young_to_lower);
+  size_t c2_young_to_upper = Atomic::load(&g1_profile_c2_young_to_upper);
+  size_t c2_young_to_upper_logged = Atomic::load(&g1_profile_c2_young_to_upper_logged);
+  size_t runtime_young_to_lower = Atomic::load(&g1_profile_runtime_young_to_lower);
+  size_t runtime_young_to_upper = Atomic::load(&g1_profile_runtime_young_to_upper);
+  size_t runtime_young_to_upper_logged = Atomic::load(&g1_profile_runtime_young_to_upper_logged);
+
+  if (current_thread != nullptr) {
+    const G1ThreadLocalData* data = G1ThreadLocalData::data(current_thread);
+    old_to_any += data->old_to_any;
+    old_to_clean_card += data->old_to_clean_card;
+    c2_young_to_lower += data->young_to_lower;
+    c2_young_to_upper += data->young_to_upper;
+    c2_young_to_upper_logged += data->young_to_upper_logged;
+    runtime_young_to_lower += data->runtime_young_to_lower;
+    runtime_young_to_upper += data->runtime_young_to_upper;
+    runtime_young_to_upper_logged += data->runtime_young_to_upper_logged;
+  }
+
+  size_t unified_young_to_lower = c2_young_to_lower + runtime_young_to_lower;
+  size_t unified_young_to_upper = c2_young_to_upper + runtime_young_to_upper;
+  size_t unified_young_to_upper_logged = c2_young_to_upper_logged + runtime_young_to_upper_logged;
+  double old_clean_pct = old_to_any == 0 ? 0.0 :
+    (100.0 * static_cast<double>(old_to_clean_card) / static_cast<double>(old_to_any));
+  double young_logged_pct = unified_young_to_upper == 0 ? 0.0 :
+    (100.0 * static_cast<double>(unified_young_to_upper_logged) / static_cast<double>(unified_young_to_upper));
+
+  log_info(gc)("Unified barrier profile: old_to_any=" SIZE_FORMAT
+               " old_to_clean_card=" SIZE_FORMAT " old_to_clean_pct=%.6f "
+               "young_to_upper=" SIZE_FORMAT " young_to_upper_logged=" SIZE_FORMAT
+               " young_logged_pct=%.6f young_to_lower=" SIZE_FORMAT
+               " [c2 upper=" SIZE_FORMAT " upper_logged=" SIZE_FORMAT " lower=" SIZE_FORMAT
+               ", runtime upper=" SIZE_FORMAT " upper_logged=" SIZE_FORMAT " lower=" SIZE_FORMAT "]",
+               old_to_any,
+               old_to_clean_card,
+               old_clean_pct,
+               unified_young_to_upper,
+               unified_young_to_upper_logged,
+               young_logged_pct,
+               unified_young_to_lower,
+               c2_young_to_upper,
+               c2_young_to_upper_logged,
+               c2_young_to_lower,
+               runtime_young_to_upper,
+               runtime_young_to_upper_logged,
+               runtime_young_to_lower);
 }

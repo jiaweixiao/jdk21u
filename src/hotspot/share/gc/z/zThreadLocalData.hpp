@@ -28,6 +28,7 @@
 #include "gc/z/zGenerationId.hpp"
 #include "gc/z/zMarkStack.hpp"
 #include "gc/z/zStoreBarrierBuffer.hpp"
+#include "gc/shared/gcThreadLocalData.hpp"
 #include "runtime/javaThread.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/sizes.hpp"
@@ -144,5 +145,7 @@ public:
     return Thread::gc_data_offset() + byte_offset_of(ZThreadLocalData, _store_barrier_buffer);
   }
 };
+
+STATIC_ASSERT(sizeof(ZThreadLocalData) <= sizeof(GCThreadLocalData));
 
 #endif // SHARE_GC_Z_ZTHREADLOCALDATA_HPP

@@ -37,6 +37,16 @@ Default:
 -XX:-G1EnableYoungToYoungLowToHighRSet
 ```
 
+There is also a second experimental switch for profiling the young-GC dequeue
+fallback:
+
+```bash
+-XX:+UnlockExperimentalVMOptions -XX:+G1YoungToYoungLowToHighRSetPauseScan
+```
+
+That option defaults to `false`. With the default setting, young GC does not do
+the expensive pause-time scan of `young_logged` cards.
+
 Design intent when the option is disabled:
 
 - G1 keeps the original old-to-young remembered-set behavior
@@ -160,12 +170,23 @@ pipeline, but the dequeue point itself now classifies the two kinds of cards:
    These continue to go through the original merge-roots / scan-roots pipeline.
 
 2. **`young_logged` cards**
-   These are consumed immediately at the same dequeue point, but only update the
-   target young region remset. They are never added to the merge-roots dirty
-   region set.
+   These are never added to the merge-roots dirty-region set. By default the
+   dequeue path only clears them back to plain young cards and leaves the real
+   remembered-set work to concurrent refinement plus evacuation-time rebuild.
+   The older pause-time scan is still available behind
+   `-XX:+G1YoungToYoungLowToHighRSetPauseScan` for profiling experiments.
 
-For the `young_logged` path, we no longer call `block_start(card_start, ...)`.
-Instead we:
+This default was chosen because a direct pause-time scan of dequeued
+`young_logged` cards made `Merge Heap Roots` extremely expensive. Profiling
+showed that the dominant cost was not scanning objects inside the card, but
+repeatedly locating the first overlapping object for almost every dequeued card.
+Sorting cards by address helped, but the safest default is still to keep that
+work out of the pause.
+
+### Optional Pause-Time Scan
+
+When `G1YoungToYoungLowToHighRSetPauseScan` is enabled, the dequeue path uses a
+young-only forward walk and still avoids `block_start(card_start, ...)`. It:
 
 1. find the source young region
 2. use `region->bottom()` as the stable object-layout base
@@ -197,17 +218,44 @@ When the same worker sees another `young_logged` card from the same region:
 This keeps the implementation independent of BOT-based reverse lookup while
 avoiding repeated full prefix scans for the common in-order case.
 
-Young-to-young internal references are therefore handled by two paths:
+Young-to-young internal references are therefore handled by these paths:
 
 1. **Concurrent refinement before the pause**
    If a logged young card is refined before young GC starts, the target young
    region remset is updated there.
 
-2. **Young-GC dequeue + evacuation-time rebuild**
-   If the queue entry survives until young GC, the pause-time dequeue path now
-   scans that card directly using the young-only forward walk described above.
-   In addition, evacuation still rebuilds the live subset of young-to-young
-   references through `G1ParScanThreadState::enqueue_card_if_tracked()`.
+2. **Evacuation-time rebuild**
+   If the queue entry survives until young GC, evacuation still rebuilds the
+   live subset of young-to-young references through
+   `G1ParScanThreadState::enqueue_card_if_tracked()`.
+
+3. **Optional young-GC dequeue scan**
+   Only when `-XX:+G1YoungToYoungLowToHighRSetPauseScan` is enabled, the young-GC
+   dequeue path scans the card directly using the young-only forward walk
+   described above.
+
+## Concurrent-Refinement Note
+
+The same BOT-based reverse lookup that was fragile in young-GC dequeue turned
+out to be unsafe for concurrent refinement too. A real application run crashed
+in `G1 Refine#0` at:
+
+```text
+HeapRegion::oops_on_memregion_iterate_with_nullptr<...>
+```
+
+while `G1RemSet::refine_card_concurrently()` was processing a `young_logged`
+card.
+
+The fix mirrors the pause-time helper:
+
+- old/humongous cards still use the original careful iterator
+- young logged cards use a young-only forward walk from `region->bottom()`
+- any unparsable state causes re-enqueue rather than a crash
+
+This keeps concurrent refinement responsible for most young-to-young remset
+updates while avoiding the BOT / `block_start()` contract for arbitrary stale
+young source cards.
 
 Both of these paths are gated by `G1EnableYoungToYoungLowToHighRSet`. With the option
 disabled, concurrent refinement, dequeue, and evacuation all behave exactly like
@@ -228,9 +276,9 @@ The intended properties are:
 
 1. Record only cross-region young-to-young references with `field_addr < target`.
 2. Avoid duplicate enqueue of the same source card.
-3. Ensure the remembered set is updated by concurrent refinement and, for
-   remaining queued work, by the young-GC dequeue path; evacuation still rebuilds
-   the live subset as an additional safety net.
+3. Ensure the remembered set is updated by concurrent refinement and evacuation;
+   the young-GC dequeue path is optional and only used for profiling
+   experiments when explicitly enabled.
 4. Keep young GC merge-roots focused on old-to-young scanning and ignore these
    young-internal links there.
 

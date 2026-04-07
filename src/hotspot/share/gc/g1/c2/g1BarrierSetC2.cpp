@@ -229,13 +229,11 @@ void G1BarrierSetC2::pre_barrier(GraphKit* kit,
   const int marking_offset = in_bytes(G1ThreadLocalData::satb_mark_queue_active_offset());
   const int index_offset   = in_bytes(G1ThreadLocalData::satb_mark_queue_index_offset());
   const int buffer_offset  = in_bytes(G1ThreadLocalData::satb_mark_queue_buffer_offset());
-  const int satb_mark_active_offset = in_bytes(G1ThreadLocalData::satb_mark_active_offset());
 
   // Now the actual pointers into the thread
   Node* marking_adr = __ AddP(no_base, tls, __ ConX(marking_offset));
   Node* buffer_adr  = __ AddP(no_base, tls, __ ConX(buffer_offset));
   Node* index_adr   = __ AddP(no_base, tls, __ ConX(index_offset));
-  Node* satb_mark_active_adr = __ AddP(no_base, tls, __ ConX(satb_mark_active_offset));
 
   // Now some of the values
   Node* marking = __ load(__ ctrl(), marking_adr, TypeInt::INT, active_type, Compile::AliasIdxRaw);
@@ -274,10 +272,6 @@ void G1BarrierSetC2::pre_barrier(GraphKit* kit,
         __ make_leaf_call(tf, CAST_FROM_FN_PTR(address, G1BarrierSetRuntime::write_ref_field_pre_entry), "write_ref_field_pre_entry", pre_val, tls);
       } __ end_if();  // (!index)
 
-      // TODO
-      Node* satb_mark_active_value = __ load(__ ctrl(), satb_mark_active_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-      Node* next_satb_mark_active_value = kit->gvn().transform(new AddXNode(satb_mark_active_value, __ ConX(1)));
-      __ store(__ ctrl(), satb_mark_active_adr, next_satb_mark_active_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
     } __ end_if();  // (pre_val != nullptr)
   } __ end_if();  // (!marking)
 
@@ -514,46 +508,95 @@ void G1BarrierSetC2::post_barrier(GraphKit* kit,
           if (G1EnableYoungToYoungLowToHighRSet) {
             const int young_to_lower_offset = in_bytes(G1ThreadLocalData::young_to_lower_offset());
             const int young_to_upper_offset = in_bytes(G1ThreadLocalData::young_to_upper_offset());
+            const int young_to_upper_logged_offset = in_bytes(G1ThreadLocalData::young_to_upper_logged_offset());
             Node* young_to_lower_adr = __ AddP(no_base, tls, __ ConX(young_to_lower_offset));
             Node* young_to_upper_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_offset));
+            Node* young_to_upper_logged_adr = __ AddP(no_base, tls, __ ConX(young_to_upper_logged_offset));
             auto maybe_log_young_card = [&]() {
-              __ if_then(adr, BoolTest::lt, val, unlikely); {
-                Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-                Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
-                __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+              // The surrounding control flow has already established that the
+              // source card is young-like and that adr/val are in different
+              // regions. The remaining checks here decide:
+              // 1) whether the target is still young-like, so the write is a
+              //    young-to-young edge worth counting, and
+              // 2) for low->high edges only, whether the source card can be
+              //    logged exactly once as young_logged.
+              Node* val_cast = __ CastPX(__ ctrl(), val);
+              Node* val_card_offset = __ URShiftX(val_cast, __ ConI(CardTable::card_shift()));
+              Node* val_card_adr = __ AddP(no_base, byte_map_base_node(kit), val_card_offset);
+              Node* val_card_val = __ load(__ ctrl(), val_card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
 
-                Node* val_cast = __ CastPX(__ ctrl(), val);
-                Node* val_card_offset = __ URShiftX(val_cast, __ ConI(CardTable::card_shift()));
-                Node* val_card_adr = __ AddP(no_base, byte_map_base_node(kit), val_card_offset);
-                Node* val_card_val = __ load(__ ctrl(), val_card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
+              // Target card is still a plain young card. This is the common
+              // case for a young-to-young cross-region store.
+              __ if_then(val_card_val, BoolTest::eq, young_card, likely); {
+                // low-address -> high-address
+                __ if_then(adr, BoolTest::lt, val, unlikely); {
+                  // Count only edges whose source and target are both young
+                  // and cross region. That is why the counter update happens
+                  // after checking val_card_val, not before.
+                  Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                  Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
+                  __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
 
-                __ if_then(val_card_val, BoolTest::eq, young_card, likely); {
+                  // Re-read the source card after the membar. Only a source
+                  // card that is still plain young is allowed to transition to
+                  // young_logged and enqueue; this is the dedup point.
                   kit->sync_kit(ideal);
                   kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
                   __ sync_kit(kit);
 
                   Node* card_val_reload = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
                   __ if_then(card_val_reload, BoolTest::eq, young_card); {
+                    // Record successful first-time logging separately from the
+                    // broader young_to_upper count.
+                    Node* young_to_upper_logged_value = __ load(__ ctrl(), young_to_upper_logged_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                    Node* next_young_to_upper_logged_value = kit->gvn().transform(new AddXNode(young_to_upper_logged_value, __ ConX(1)));
+                    __ store(__ ctrl(), young_to_upper_logged_adr, next_young_to_upper_logged_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
                     __ storeCM(__ ctrl(), card_adr, young_card_logged, oop_store, alias_idx, card_bt, Compile::AliasIdxRaw);
                     g1_enqueue_card(kit, ideal, card_adr, index, index_adr, buffer, tf);
                   } __ end_if();
                 } __ else_(); {
-                  __ if_then(val_card_val, BoolTest::eq, young_card_logged, likely); {
+                  // high-address -> low-address young-to-young edge. This
+                  // direction is counted for profiling / analysis only and does
+                  // not participate in the low-to-high logged-card scheme.
+                  Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                  Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
+                  __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+                } __ end_if();
+              } __ else_(); {
+                // Target card may already be young_logged because some other
+                // source card previously logged an edge into the same target
+                // young region. Treat that as young-like too, so the current
+                // edge is still counted as young-to-young.
+                __ if_then(val_card_val, BoolTest::eq, young_card_logged, likely); {
+                  // low-address -> high-address
+                  __ if_then(adr, BoolTest::lt, val, unlikely); {
+                    Node* young_to_upper_value = __ load(__ ctrl(), young_to_upper_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                    Node* next_young_to_upper_value = kit->gvn().transform(new AddXNode(young_to_upper_value, __ ConX(1)));
+                    __ store(__ ctrl(), young_to_upper_adr, next_young_to_upper_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
+
+                    // Same dedup rule as above: source must still be plain
+                    // young before we upgrade it to young_logged and enqueue.
                     kit->sync_kit(ideal);
                     kit->insert_mem_bar(Op_MemBarVolatile, oop_store);
                     __ sync_kit(kit);
 
                     Node* card_val_reload = __ load(__ ctrl(), card_adr, TypeInt::INT, T_BYTE, Compile::AliasIdxRaw);
                     __ if_then(card_val_reload, BoolTest::eq, young_card); {
+                      Node* young_to_upper_logged_value = __ load(__ ctrl(), young_to_upper_logged_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                      Node* next_young_to_upper_logged_value = kit->gvn().transform(new AddXNode(young_to_upper_logged_value, __ ConX(1)));
+                      __ store(__ ctrl(), young_to_upper_logged_adr, next_young_to_upper_logged_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
                       __ storeCM(__ ctrl(), card_adr, young_card_logged, oop_store, alias_idx, card_bt, Compile::AliasIdxRaw);
                       g1_enqueue_card(kit, ideal, card_adr, index, index_adr, buffer, tf);
                     } __ end_if();
+                  } __ else_(); {
+                    // high-address -> low-address young-to-young edge with a
+                    // young_logged target. Still a counted lower-direction edge,
+                    // but never enqueued by this experiment.
+                    Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
+                    Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
+                    __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
                   } __ end_if();
                 } __ end_if();
-              } __ else_(); {
-                Node* young_to_lower_value = __ load(__ ctrl(), young_to_lower_adr, TypeX_X, TypeX_X->basic_type(), Compile::AliasIdxRaw);
-                Node* next_young_to_lower_value = kit->gvn().transform(new AddXNode(young_to_lower_value, __ ConX(1)));
-                __ store(__ ctrl(), young_to_lower_adr, next_young_to_lower_value, TypeX_X->basic_type(), Compile::AliasIdxRaw, MemNode::unordered);
               } __ end_if();
             };
 

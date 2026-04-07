@@ -24,6 +24,7 @@
 #ifndef SHARE_GC_X_XTHREADLOCALDATA_HPP
 #define SHARE_GC_X_XTHREADLOCALDATA_HPP
 
+#include "gc/shared/gcThreadLocalData.hpp"
 #include "gc/x/xMarkStack.hpp"
 #include "gc/x/xGlobals.hpp"
 #include "runtime/javaThread.hpp"
@@ -87,5 +88,7 @@ public:
     return address_bad_mask_offset() + in_ByteSize(XAddressBadMaskHighOrderBitsOffset);
   }
 };
+
+STATIC_ASSERT(sizeof(XThreadLocalData) <= sizeof(GCThreadLocalData));
 
 #endif // SHARE_GC_X_XTHREADLOCALDATA_HPP

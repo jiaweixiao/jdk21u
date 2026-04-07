@@ -311,7 +311,18 @@
   product(bool, G1YoungToYoungLowToHighRSetPauseScan, false, EXPERIMENTAL,  \
           "During young GC Merge Heap Roots, scan dequeued young_logged "   \
           "cards to update young-to-young remsets. Disabled by default "    \
-          "because this path can significantly increase pause time.")        \
+          "because this path can significantly increase pause time.")       \
+                                                                            \
+  product(bool, G1YoungToYoungLowToHighRSetEnqueueOnly, false, EXPERIMENTAL,\
+          "Keep the young-to-young low-to-high write barrier and queue "    \
+          "traffic, but skip all later remset processing for young_logged " \
+          "cards. This is intended for controlled experiments that isolate "\
+          "write-barrier plus enqueue overhead.")                           \
+                                                                            \
+  product(bool, G1YoungToYoungLowToHighRSetC2Only, false, EXPERIMENTAL,     \
+          "Restrict the experimental young-to-young low-to-high handling "  \
+          "to the C2 post-barrier. Runtime slow paths and later remset "    \
+          "maintenance skip this feature when enabled.")                    \
                                                                             \
   product(double, G1RemSetFreeMemoryStepDurationMillis, 1, EXPERIMENTAL,    \
           "The amount of time that the free memory task should spend "      \

@@ -55,7 +55,9 @@
 #include "runtime/os.hpp"
 #include "utilities/align.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/powerOfTwo.hpp"
+#include "utilities/quickSort.hpp"
 #include "utilities/stack.inline.hpp"
 #include "utilities/ticks.hpp"
 #include CPU_HEADER(gc/g1/g1Globals)
@@ -1211,6 +1213,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
     // region so we can continue the forward walk instead of rescanning from bottom().
     HeapWord** _young_last_obj_start;
     HeapWord** _young_last_obj_end;
+    GrowableArrayCHeap<CardValue*, mtGC> _young_logged_cards;
     size_t _young_logged_cards_cleared;
     size_t _young_logged_cards_scanned;
     Tickspan _young_logged_cards_time;
@@ -1226,6 +1229,10 @@ class G1MergeHeapRootsTask : public WorkerTask {
       _cards_dirty++;
     }
 
+    static int compare_logged_card(CardValue** left, CardValue** right) {
+      return *left - *right;
+    }
+
   public:
     G1MergeLogBufferCardsClosure(G1CollectedHeap* g1h, G1RemSetScanState* scan_state) :
       _g1h(g1h),
@@ -1234,6 +1241,7 @@ class G1MergeHeapRootsTask : public WorkerTask {
       _ct(g1h->card_table()),
       _young_last_obj_start(NEW_C_HEAP_ARRAY(HeapWord*, g1h->max_reserved_regions(), mtGC)),
       _young_last_obj_end(NEW_C_HEAP_ARRAY(HeapWord*, g1h->max_reserved_regions(), mtGC)),
+      _young_logged_cards(0),
       _young_logged_cards_cleared(0),
       _young_logged_cards_scanned(0),
       _young_logged_cards_time(),
@@ -1290,22 +1298,20 @@ class G1MergeHeapRootsTask : public WorkerTask {
       // activate the young_logged side branch when the experimental flag is on.
       if (G1EnableYoungToYoungLowToHighRSet &&
           card_value == G1CardTable::g1_young_gen_logged_card_val()) {
-        Ticks start = Ticks::now();
-        if (G1YoungToYoungLowToHighRSetPauseScan) {
-          _g1rs->refine_young_card_during_gc(card_ptr,
-                                             worker_id,
-                                             _young_last_obj_start,
-                                             _young_last_obj_end,
-                                             &_young_scan_stats);
-          _young_logged_cards_scanned++;
+        if (G1YoungToYoungLowToHighRSetPauseScan &&
+            !G1YoungToYoungLowToHighRSetEnqueueOnly &&
+            !G1YoungToYoungLowToHighRSetC2Only) {
+          _young_logged_cards.append(card_ptr);
         } else {
-          // Disable pause-time scanning of young_logged cards by default. The
-          // young GC log showed Merge Heap Roots dominating pause time, and this
-          // dequeue path is the only young-to-young work performed there.
+          Ticks start = Ticks::now();
+          // Default mode clears queued young_logged cards instead of scanning
+          // them during the pause. The enqueue-only experiment also uses this
+          // minimal path so we can measure barrier + queue traffic without any
+          // later young-to-young remset maintenance in dequeue.
           *card_ptr = hr->is_young() ? G1CardTable::g1_young_card_val() : G1CardTable::clean_card_val();
           _young_logged_cards_cleared++;
+          _young_logged_cards_time += Ticks::now() - start;
         }
-        _young_logged_cards_time += Ticks::now() - start;
         _cards_skipped++;
         return;
       }
@@ -1313,6 +1319,24 @@ class G1MergeHeapRootsTask : public WorkerTask {
       // We may have had clean / already scanned cards in the queue, or dirty
       // cards for regions that are handled elsewhere in the pause. Ignore them.
       _cards_skipped++;
+    }
+
+    void process_young_logged_cards(uint worker_id) {
+      if (!G1YoungToYoungLowToHighRSetPauseScan || _young_logged_cards.is_empty()) {
+        return;
+      }
+
+      Ticks start = Ticks::now();
+      _young_logged_cards.sort(compare_logged_card);
+      for (int i = 0; i < _young_logged_cards.length(); i++) {
+        _g1rs->refine_young_card_during_gc(_young_logged_cards.at(i),
+                                           worker_id,
+                                           _young_last_obj_start,
+                                           _young_last_obj_end,
+                                           &_young_scan_stats);
+        _young_logged_cards_scanned++;
+      }
+      _young_logged_cards_time += Ticks::now() - start;
     }
 
     size_t cards_dirty() const { return _cards_dirty; }
@@ -1430,6 +1454,7 @@ public:
 
       G1MergeLogBufferCardsClosure cl(g1h, _scan_state);
       apply_closure_to_dirty_card_buffers(&cl, worker_id);
+      cl.process_young_logged_cards(worker_id);
 
       p->record_thread_work_item(G1GCPhaseTimes::MergeLB, worker_id, cl.cards_dirty(), G1GCPhaseTimes::MergeLBDirtyCards);
       p->record_thread_work_item(G1GCPhaseTimes::MergeLB, worker_id, cl.cards_skipped(), G1GCPhaseTimes::MergeLBSkippedCards);
@@ -1655,6 +1680,12 @@ void G1RemSet::refine_card_concurrently(CardValue* const card_ptr,
   if (!G1EnableYoungToYoungLowToHighRSet && r->is_young()) {
     return;
   }
+  if ((G1YoungToYoungLowToHighRSetEnqueueOnly || G1YoungToYoungLowToHighRSetC2Only) &&
+      r->is_young()) {
+    // Controlled-overhead mode: retain barrier logging and queue traffic, but
+    // drop the young-to-young remset work once the queue entry is consumed.
+    return;
+  }
   // This reload of the top is safe even though it happens after the full
   // fence, because top is stable for old and unfiltered humongous
   // regions, so it must return the same value as the previous load when
@@ -1670,10 +1701,76 @@ void G1RemSet::refine_card_concurrently(CardValue* const card_ptr,
   MemRegion dirty_region(start, MIN2(scan_limit, end));
   assert(!dirty_region.is_empty(), "sanity");
 
+  if (G1EnableYoungToYoungLowToHighRSet && r->is_young()) {
+    G1ConcurrentRefineOopClosure conc_refine_cl(_g1h, worker_id);
+    HeapWord* cur = r->bottom();
+    bool success = true;
+
+    // Concurrent refinement can also observe stale young_logged cards. An
+    // application run hit SIGSEGV in G1 Refine#0 while the old
+    // oops_on_memregion_seq_iterate_careful<false>() path was trying to feed a
+    // young source card back through block_start()/BOT. Use the same
+    // young-only forward walk as the pause-time helper instead: start from the
+    // region bottom, validate each object with klass_or_null_acquire(), and
+    // only scan the portion overlapping the logged card. If we encounter a
+    // partially initialized object or any other unparsable state, leave the
+    // card for later reprocessing rather than crashing the refine thread.
+    while (cur < dirty_region.start()) {
+      oop obj = cast_to_oop(cur);
+      if (!oopDesc::is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr) {
+        success = false;
+        break;
+      }
+
+      HeapWord* next = cur + obj->size();
+      if (next <= cur || next > scan_limit) {
+        success = false;
+        break;
+      }
+      if (next > dirty_region.start()) {
+        break;
+      }
+      cur = next;
+    }
+
+    while (success && cur < dirty_region.end()) {
+      oop obj = cast_to_oop(cur);
+      if (!oopDesc::is_oop(obj, true) || obj->klass_or_null_acquire() == nullptr) {
+        success = false;
+        break;
+      }
+
+      HeapWord* next = cur + obj->size();
+      if (next <= cur || next > scan_limit) {
+        success = false;
+        break;
+      }
+
+      if (!obj->is_objArray() ||
+          (cast_from_oop<HeapWord*>(obj) >= dirty_region.start() && next <= dirty_region.end())) {
+        obj->oop_iterate(&conc_refine_cl);
+      } else {
+        obj->oop_iterate(&conc_refine_cl, dirty_region);
+      }
+      cur = next;
+    }
+    if (success) {
+      return;
+    }
+    if (*card_ptr == G1CardTable::dirty_card_val() ||
+        (G1EnableYoungToYoungLowToHighRSet &&
+         *card_ptr == G1CardTable::g1_young_gen_logged_card_val())) {
+      return;
+    }
+    enqueue_for_reprocessing(card_ptr);
+    return;
+  }
+
   G1ConcurrentRefineOopClosure conc_refine_cl(_g1h, worker_id);
   if (r->oops_on_memregion_seq_iterate_careful<false>(dirty_region, &conc_refine_cl) != nullptr) {
     return;
   }
+  return;
 
   // If unable to process the card then we encountered an unparsable
   // part of the heap (e.g. a partially allocated object, so only
@@ -1701,7 +1798,7 @@ void G1RemSet::refine_young_card_during_gc(CardValue* card_ptr,
   assert(SafepointSynchronize::is_at_safepoint(), "Only call during GC");
   check_card_ptr(card_ptr, _ct);
 
-  if (!G1EnableYoungToYoungLowToHighRSet) {
+  if (!G1EnableYoungToYoungLowToHighRSet || G1YoungToYoungLowToHighRSetC2Only) {
     return;
   }
 
