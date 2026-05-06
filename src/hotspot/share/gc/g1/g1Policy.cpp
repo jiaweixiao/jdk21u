@@ -312,16 +312,22 @@ uint G1Policy::calculate_young_desired_length(size_t pending_cards, size_t rs_le
         double sys_rate = (_mut_sys_time + _gc_sys_time) / (_mut_user_time + _gc_user_time);
         double mut_sys_time_base = _mut_sys_time > 0.1 ? 2*_mut_sys_time:0;
         double gc_sys_time_base = _gc_sys_time > 0.1 ? 2*_gc_sys_time:0;
+        double gc_real_total = _gc_real_time + _mut_real_time;
+        double gc_real_ratio = gc_real_total > 0.0 ? _gc_real_time / gc_real_total : 0.0;
+        double gc_sys_total = gc_sys_time_base + _gc_user_time;
+        double gc_sys_ratio = gc_sys_total > 0.0 ? gc_sys_time_base / gc_sys_total : 0.0;
         //double mut_rate = _mut_user_time / (_mut_user_time + _mut_sys_time + _gc_user_time + _gc_sys_time);
-        if(2 * _gc_real_time >= _mut_real_time && _gc_real_time < 0.03){
+        if(gc_real_ratio > G1HighThruGcCostRatioThreshold && _gc_real_time < 0.03){
           //small eden with fast alloc, incre eden
           desired_eden_count += SMALL_EDEN_STEP;
           log_info(gc, ergo)("[DEBUG] incre eden for one step(fast alloc or small eden), new eden = %ld", desired_eden_count);
-        }else if(gc_sys_time_base > _gc_user_time){
+        }else if(gc_sys_ratio > G1HighThruGcSysRatioThreshold){
 		  //}else if(mut_sys_time_base > _mut_user_time || gc_sys_time_base > _gc_user_time){
           //decre eden for large WSS
-          double mut_decre = mut_sys_time_base > _mut_user_time ? eden_decre_factor(_mut_sys_time,_mut_user_time) : 0;
-          double gc_decre = gc_sys_time_base > _gc_user_time ? eden_decre_factor(_gc_sys_time,_gc_user_time) : 0;
+          double mu_sys_total = mut_sys_time_base + _mut_user_time;
+          double mu_sys_ratio = mu_sys_total > 0.0 ? mut_sys_time_base / mu_sys_total : 0.0;
+          double mut_decre = mu_sys_ratio > G1HighThruGcSysRatioThreshold ? eden_decre_factor(_mut_sys_time,_mut_user_time) : 0;
+          double gc_decre = gc_sys_ratio > G1HighThruGcSysRatioThreshold ? eden_decre_factor(_gc_sys_time,_gc_user_time) : 0;
           double decre = (mut_decre - gc_decre) / 4 + gc_decre;
           desired_eden_count = (size_t)((double)desired_eden_count * (1 - decre));
           log_info(gc, ergo)("[DEBUG] decre eden for %lf, new eden = %ld", decre, desired_eden_count);
@@ -1694,4 +1700,3 @@ void G1Policy::calculate_minor_gc(){
   }else
     log_info(gc, ergo)("calculate gc fail: os::getTimesSecs() returned invalid result");
 }
-

@@ -115,6 +115,12 @@
           "Use stop-the-world-concurrent marking")                          \
   product(bool, G1UseHighThruTuning, false,                                 \
           "Use the high-throughput autotuning strategy for far memory")     \
+  product(double, G1HighThruGcSysRatioThreshold, 0.5,                   \
+          "GC system time ratio threshold for G1 high-throughput tuning")   \
+          range(0.0, 1.0)                                                   \
+  product(double, G1HighThruGcCostRatioThreshold, 1.0 / 3.0,            \
+          "GC real time ratio threshold for G1 high-throughput tuning")    \
+          range(0.0, 1.0)                                                   \
   product(size_t, G1AdaptiveIHOPNumInitialSamples, 3, EXPERIMENTAL,         \
           "How many completed time periods from concurrent start to first " \
           "mixed gc are required to use the input values for prediction "   \
